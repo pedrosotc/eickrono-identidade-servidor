@@ -1,0 +1,68 @@
+spring:
+  config:
+    activate:
+      on-profile: dev
+  datasource:
+    url: jdbc:postgresql://localhost:5432/eickrono_identidade
+    username: eickrono_dev
+    password: senhaSuperSeguraDev
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        default_schema: identidade
+  flyway:
+    schemas: identidade
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8080/realms/eickrono
+          jwk-set-uri: http://localhost:8080/realms/eickrono/protocol/openid-connect/certs
+
+seguranca:
+  cors:
+    origens-permitidas:
+      - http://localhost:3000
+      - http://127.0.0.1:3000
+
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+
+documentacao:
+  swagger:
+    usuario: swagger
+    senha: swagger-dev
+
+logging:
+  level:
+    com.eickrono.api.identidade: DEBUG
+
+identidade:
+  seguranca:
+    app:
+      modo-observacao: true
+  atestacao:
+    app:
+      permitir-validacao-local-sem-provedor-oficial: ${IDENTIDADE_ATESTACAO_APP_PERMITIR_VALIDACAO_LOCAL_SEM_PROVEDOR_OFICIAL:true}
+      google:
+        habilitado: ${IDENTIDADE_ATESTACAO_APP_GOOGLE_HABILITADO:false}
+      apple:
+        habilitado: ${IDENTIDADE_ATESTACAO_APP_APPLE_HABILITADO:false}
+  cadastro:
+    interna:
+      keycloak:
+        client-id: ${IDENTIDADE_CADASTRO_INTERNO_KEYCLOAK_CLIENT_ID:admin-cli}
+  sessao:
+    interna:
+      keycloak:
+        client-id: ${IDENTIDADE_SESSAO_INTERNA_KEYCLOAK_CLIENT_ID:app-flutter-local}
+  dispositivo:
+    token:
+      segredo-hmac: ${IDENTIDADE_DEVICE_TOKEN_SECRET:dev-device-token-secret}
+    codigo:
+      segredo-hmac: ${IDENTIDADE_CODIGO_TOKEN_SECRET:dev-codigo-secret}
