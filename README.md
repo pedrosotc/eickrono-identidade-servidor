@@ -37,6 +37,20 @@ Para empacotar:
 make package
 ```
 
+## Consulta de versão em runtime
+
+O serviço expõe duas formas de consulta operacional:
+
+- `GET /api/v1/estado`
+- `GET /actuator/info`
+
+O endpoint `/api/v1/estado` devolve:
+
+- `servico`
+- `status`
+- `versao`
+- `buildTime`
+
 ## Docker
 
 O `Dockerfile` deste projeto espera que o `jar` ja tenha sido empacotado em

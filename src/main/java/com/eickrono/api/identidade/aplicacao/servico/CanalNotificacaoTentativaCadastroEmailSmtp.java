@@ -1,5 +1,6 @@
 package com.eickrono.api.identidade.aplicacao.servico;
 
+import com.eickrono.api.identidade.aplicacao.excecao.EntregaEmailException;
 import com.eickrono.api.identidade.infraestrutura.configuracao.CadastroEmailProperties;
 import java.util.Objects;
 import org.slf4j.Logger;
@@ -43,7 +44,18 @@ public class CanalNotificacaoTentativaCadastroEmailSmtp implements CanalNotifica
             javaMailSender.send(mensagem);
             LOGGER.info("Aviso de tentativa de cadastro enviado por SMTP para {}", email);
         } catch (MailException ex) {
-            throw new IllegalStateException("Falha ao enviar o aviso de tentativa de cadastro por SMTP.", ex);
+            LOGGER.error(
+                    "notificacao_cadastro_email_smtp_falhou email={} motivo={}",
+                    email,
+                    ex.getMessage(),
+                    ex
+            );
+            throw new EntregaEmailException(
+                    "notificacao_email_indisponivel",
+                    "Não foi possível enviar o aviso por e-mail agora.",
+                    "Falha ao enviar o aviso de tentativa de cadastro por SMTP.",
+                    ex
+            );
         }
     }
 

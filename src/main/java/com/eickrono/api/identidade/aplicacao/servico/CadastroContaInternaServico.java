@@ -1,14 +1,18 @@
 package com.eickrono.api.identidade.aplicacao.servico;
 
+import com.eickrono.api.identidade.aplicacao.excecao.EntregaEmailException;
 import com.eickrono.api.identidade.aplicacao.excecao.FluxoPublicoException;
 import com.eickrono.api.identidade.aplicacao.modelo.CadastroInternoRealizado;
 import com.eickrono.api.identidade.aplicacao.modelo.CadastroKeycloakProvisionado;
 import com.eickrono.api.identidade.aplicacao.modelo.ConfirmacaoEmailCadastroInternoRealizada;
 import com.eickrono.api.identidade.aplicacao.modelo.ConfirmacaoEmailCadastroPublicoRealizada;
 import com.eickrono.api.identidade.aplicacao.modelo.ConviteOrganizacionalValidado;
+import com.eickrono.api.identidade.aplicacao.modelo.ContextoSolicitacaoFluxoPublico;
 import com.eickrono.api.identidade.aplicacao.modelo.ContextoPessoaPerfil;
 import com.eickrono.api.identidade.aplicacao.modelo.IdentidadeFederadaKeycloak;
+import com.eickrono.api.identidade.aplicacao.modelo.ProjetoFluxoPublicoResolvido;
 import com.eickrono.api.identidade.aplicacao.modelo.ProvisionamentoPerfilRealizado;
+import com.eickrono.api.identidade.aplicacao.modelo.StatusCadastroPublico;
 import com.eickrono.api.identidade.aplicacao.modelo.VinculoSocialPendenteCadastro;
 import com.eickrono.api.identidade.dominio.modelo.CadastroConta;
 import com.eickrono.api.identidade.dominio.modelo.CanalValidacaoTelefoneCadastro;
@@ -17,7 +21,6 @@ import com.eickrono.api.identidade.dominio.modelo.PerfilIdentidade;
 import com.eickrono.api.identidade.dominio.modelo.Pessoa;
 import com.eickrono.api.identidade.dominio.modelo.ProvedorVinculoSocial;
 import com.eickrono.api.identidade.dominio.modelo.SexoPessoaCadastro;
-import com.eickrono.api.identidade.dominio.modelo.StatusCadastroConta;
 import com.eickrono.api.identidade.dominio.modelo.StatusConviteOrganizacional;
 import com.eickrono.api.identidade.dominio.modelo.TipoFormaAcesso;
 import com.eickrono.api.identidade.dominio.modelo.TipoPessoaCadastro;
@@ -28,6 +31,7 @@ import com.eickrono.api.identidade.dominio.repositorio.ConviteOrganizacionalRepo
 import com.eickrono.api.identidade.dominio.repositorio.FormaAcessoRepositorio;
 import com.eickrono.api.identidade.dominio.repositorio.PerfilIdentidadeRepositorio;
 import com.eickrono.api.identidade.dominio.repositorio.PessoaRepositorio;
+import com.eickrono.api.identidade.dominio.repositorio.RecuperacaoSenhaRepositorio;
 import com.eickrono.api.identidade.dominio.repositorio.VinculoOrganizacionalRepositorio;
 import com.eickrono.api.identidade.dominio.repositorio.VinculoSocialRepositorio;
 import com.eickrono.api.identidade.infraestrutura.configuracao.DispositivoProperties;
@@ -77,6 +81,9 @@ public class CadastroContaInternaServico {
     private final DispositivoProperties dispositivoProperties;
     private final Clock clock;
     private final SincronizacaoModeloMultiappService sincronizacaoModeloMultiappService;
+    private final AuditoriaService auditoriaService;
+    private final ResolvedorContextoFluxoPublico resolvedorContextoFluxoPublico;
+    private final ResolvedorProjetoFluxoPublico resolvedorProjetoFluxoPublico;
     private ProvisionamentoIdentidadeService provisionamentoIdentidadeServiceCompat;
     private final HexFormat hexFormat = HexFormat.of();
 
@@ -96,7 +103,10 @@ public class CadastroContaInternaServico {
                                        final CanalNotificacaoTentativaCadastroEmail canalNotificacaoTentativaCadastroEmail,
                                        final DispositivoProperties dispositivoProperties,
                                        final Clock clock,
-                                       final SincronizacaoModeloMultiappService sincronizacaoModeloMultiappService) {
+                                       final SincronizacaoModeloMultiappService sincronizacaoModeloMultiappService,
+                                       final AuditoriaService auditoriaService,
+                                       final ResolvedorContextoFluxoPublico resolvedorContextoFluxoPublico,
+                                       final ResolvedorProjetoFluxoPublico resolvedorProjetoFluxoPublico) {
         this(
                 cadastroContaRepositorio,
                 clienteContextoPessoaPerfil,
@@ -114,11 +124,15 @@ public class CadastroContaInternaServico {
                 dispositivoProperties,
                 clock,
                 sincronizacaoModeloMultiappService,
+                auditoriaService,
+                resolvedorContextoFluxoPublico,
+                resolvedorProjetoFluxoPublico,
                 true
         );
     }
 
     public CadastroContaInternaServico(final CadastroContaRepositorio cadastroContaRepositorio,
+                                       final RecuperacaoSenhaRepositorio recuperacaoSenhaRepositorio,
                                        final FormaAcessoRepositorio formaAcessoRepositorio,
                                        final ClienteAdministracaoCadastroKeycloak clienteAdministracaoCadastroKeycloak,
                                        final ProvisionamentoIdentidadeService provisionamentoIdentidadeService,
@@ -146,12 +160,16 @@ public class CadastroContaInternaServico {
                 dispositivoProperties,
                 clock,
                 null,
+                null,
+                new ResolvedorContextoFluxoPublico(cadastroContaRepositorio, recuperacaoSenhaRepositorio),
+                aplicacaoId -> new ProjetoFluxoPublicoResolvido(0L, aplicacaoId, aplicacaoId, null, null, null, true),
                 false
         );
         this.provisionamentoIdentidadeServiceCompat = provisionamentoIdentidadeService;
     }
 
     public CadastroContaInternaServico(final CadastroContaRepositorio cadastroContaRepositorio,
+                                       final RecuperacaoSenhaRepositorio recuperacaoSenhaRepositorio,
                                        final ClienteContextoPessoaPerfil clienteContextoPessoaPerfil,
                                        final ClienteAdministracaoCadastroKeycloak clienteAdministracaoCadastroKeycloak,
                                        final PessoaRepositorio pessoaRepositorio,
@@ -168,6 +186,7 @@ public class CadastroContaInternaServico {
                                        final Clock clock) {
         this(
                 cadastroContaRepositorio,
+                recuperacaoSenhaRepositorio,
                 clienteContextoPessoaPerfil,
                 clienteAdministracaoCadastroKeycloak,
                 pessoaRepositorio,
@@ -183,6 +202,48 @@ public class CadastroContaInternaServico {
                 dispositivoProperties,
                 clock,
                 null,
+                null
+        );
+    }
+
+    public CadastroContaInternaServico(final CadastroContaRepositorio cadastroContaRepositorio,
+                                       final RecuperacaoSenhaRepositorio recuperacaoSenhaRepositorio,
+                                       final ClienteContextoPessoaPerfil clienteContextoPessoaPerfil,
+                                       final ClienteAdministracaoCadastroKeycloak clienteAdministracaoCadastroKeycloak,
+                                       final PessoaRepositorio pessoaRepositorio,
+                                       final PerfilIdentidadeRepositorio perfilIdentidadeRepositorio,
+                                       final FormaAcessoRepositorio formaAcessoRepositorio,
+                                       final VinculoSocialRepositorio vinculoSocialRepositorio,
+                                       final ConviteOrganizacionalRepositorio conviteOrganizacionalRepositorio,
+                                       final VinculoOrganizacionalRepositorio vinculoOrganizacionalRepositorio,
+                                       final ProvisionadorPerfilDominioServico provisionadorPerfilDominioServico,
+                                       final CanalEnvioCodigoCadastroEmail canalEnvioCodigoCadastroEmail,
+                                       final CanalEnvioCodigoCadastroTelefone canalEnvioCodigoCadastroTelefone,
+                                       final CanalNotificacaoTentativaCadastroEmail canalNotificacaoTentativaCadastroEmail,
+                                       final DispositivoProperties dispositivoProperties,
+                                       final Clock clock,
+                                       final SincronizacaoModeloMultiappService sincronizacaoModeloMultiappService,
+                                       final AuditoriaService auditoriaService) {
+        this(
+                cadastroContaRepositorio,
+                clienteContextoPessoaPerfil,
+                clienteAdministracaoCadastroKeycloak,
+                pessoaRepositorio,
+                perfilIdentidadeRepositorio,
+                formaAcessoRepositorio,
+                vinculoSocialRepositorio,
+                conviteOrganizacionalRepositorio,
+                vinculoOrganizacionalRepositorio,
+                provisionadorPerfilDominioServico,
+                canalEnvioCodigoCadastroEmail,
+                canalEnvioCodigoCadastroTelefone,
+                canalNotificacaoTentativaCadastroEmail,
+                dispositivoProperties,
+                clock,
+                sincronizacaoModeloMultiappService,
+                auditoriaService,
+                new ResolvedorContextoFluxoPublico(cadastroContaRepositorio, recuperacaoSenhaRepositorio),
+                aplicacaoId -> new ProjetoFluxoPublicoResolvido(0L, aplicacaoId, aplicacaoId, null, null, null, true),
                 true
         );
     }
@@ -203,6 +264,9 @@ public class CadastroContaInternaServico {
                                         final DispositivoProperties dispositivoProperties,
                                         final Clock clock,
                                         final SincronizacaoModeloMultiappService sincronizacaoModeloMultiappService,
+                                        final AuditoriaService auditoriaService,
+                                        final ResolvedorContextoFluxoPublico resolvedorContextoFluxoPublico,
+                                        final ResolvedorProjetoFluxoPublico resolvedorProjetoFluxoPublico,
                                         final boolean exigirProvisionadorPerfil) {
         this.cadastroContaRepositorio = Objects.requireNonNull(cadastroContaRepositorio, "cadastroContaRepositorio é obrigatório");
         this.clienteContextoPessoaPerfil = Objects.requireNonNull(
@@ -230,6 +294,11 @@ public class CadastroContaInternaServico {
         this.dispositivoProperties = Objects.requireNonNull(dispositivoProperties, "dispositivoProperties é obrigatório");
         this.clock = Objects.requireNonNull(clock, "clock é obrigatório");
         this.sincronizacaoModeloMultiappService = sincronizacaoModeloMultiappService;
+        this.auditoriaService = auditoriaService;
+        this.resolvedorContextoFluxoPublico = Objects.requireNonNull(
+                resolvedorContextoFluxoPublico, "resolvedorContextoFluxoPublico e obrigatorio");
+        this.resolvedorProjetoFluxoPublico = Objects.requireNonNull(
+                resolvedorProjetoFluxoPublico, "resolvedorProjetoFluxoPublico e obrigatorio");
         this.provisionamentoIdentidadeServiceCompat = null;
     }
 
@@ -255,9 +324,11 @@ public class CadastroContaInternaServico {
                 senhaPura,
                 null,
                 null,
+                null,
                 sistemaSolicitante,
                 ipSolicitante,
-                userAgentSolicitante
+                userAgentSolicitante,
+                null
         );
     }
 
@@ -288,10 +359,11 @@ public class CadastroContaInternaServico {
                 tipoValidacaoTelefone,
                 senhaPura,
                 null,
-                null,
+                sistemaSolicitante,
                 sistemaSolicitante,
                 ipSolicitante,
-                userAgentSolicitante
+                userAgentSolicitante,
+                null
         );
     }
 
@@ -323,10 +395,125 @@ public class CadastroContaInternaServico {
                 tipoValidacaoTelefone,
                 senhaPura,
                 vinculoSocialPendente,
-                null,
+                sistemaSolicitante,
                 sistemaSolicitante,
                 ipSolicitante,
-                userAgentSolicitante
+                userAgentSolicitante,
+                null
+        );
+    }
+
+    public CadastroInternoRealizado cadastrarPublico(final TipoPessoaCadastro tipoPessoa,
+                                                     final String nomeCompleto,
+                                                     final String nomeFantasia,
+                                                     final String usuario,
+                                                     final SexoPessoaCadastro sexo,
+                                                     final String paisNascimento,
+                                                     final LocalDate dataNascimento,
+                                                     final String emailPrincipal,
+                                                     final String telefonePrincipal,
+                                                     final CanalValidacaoTelefoneCadastro tipoValidacaoTelefone,
+                                                     final String senhaPura,
+                                                     final VinculoSocialPendenteCadastro vinculoSocialPendente,
+                                                     final String sistemaSolicitante,
+                                                     final String ipSolicitante,
+                                                     final String userAgentSolicitante,
+                                                     final ContextoSolicitacaoFluxoPublico contextoSolicitacao) {
+        return cadastrarPublico(
+                tipoPessoa,
+                nomeCompleto,
+                nomeFantasia,
+                usuario,
+                sexo,
+                paisNascimento,
+                dataNascimento,
+                emailPrincipal,
+                telefonePrincipal,
+                tipoValidacaoTelefone,
+                senhaPura,
+                vinculoSocialPendente,
+                sistemaSolicitante,
+                sistemaSolicitante,
+                ipSolicitante,
+                userAgentSolicitante,
+                contextoSolicitacao
+        );
+    }
+
+    public CadastroInternoRealizado cadastrarPublico(final TipoPessoaCadastro tipoPessoa,
+                                                     final String nomeCompleto,
+                                                     final String nomeFantasia,
+                                                     final String usuario,
+                                                     final SexoPessoaCadastro sexo,
+                                                     final String paisNascimento,
+                                                     final LocalDate dataNascimento,
+                                                     final String emailPrincipal,
+                                                     final String telefonePrincipal,
+                                                     final CanalValidacaoTelefoneCadastro tipoValidacaoTelefone,
+                                                     final String senhaPura,
+                                                     final VinculoSocialPendenteCadastro vinculoSocialPendente,
+                                                     final String aplicacaoId,
+                                                     final String sistemaSolicitante,
+                                                     final String ipSolicitante,
+                                                     final String userAgentSolicitante,
+                                                     final ContextoSolicitacaoFluxoPublico contextoSolicitacao) {
+        return cadastrarPublico(
+                tipoPessoa,
+                nomeCompleto,
+                nomeFantasia,
+                usuario,
+                sexo,
+                paisNascimento,
+                dataNascimento,
+                emailPrincipal,
+                telefonePrincipal,
+                tipoValidacaoTelefone,
+                senhaPura,
+                vinculoSocialPendente,
+                null,
+                aplicacaoId,
+                sistemaSolicitante,
+                ipSolicitante,
+                userAgentSolicitante,
+                contextoSolicitacao
+        );
+    }
+
+    public CadastroInternoRealizado cadastrarPublico(final TipoPessoaCadastro tipoPessoa,
+                                                     final String nomeCompleto,
+                                                     final String nomeFantasia,
+                                                     final String usuario,
+                                                     final SexoPessoaCadastro sexo,
+                                                     final String paisNascimento,
+                                                     final LocalDate dataNascimento,
+                                                     final String emailPrincipal,
+                                                     final String telefonePrincipal,
+                                                     final CanalValidacaoTelefoneCadastro tipoValidacaoTelefone,
+                                                     final String senhaPura,
+                                                     final VinculoSocialPendenteCadastro vinculoSocialPendente,
+                                                     final String aplicacaoId,
+                                                     final String sistemaSolicitante,
+                                                     final String ipSolicitante,
+                                                     final String userAgentSolicitante) {
+        return cadastrarPublico(
+                tipoPessoa,
+                nomeCompleto,
+                nomeFantasia,
+                usuario,
+                sexo,
+                paisNascimento,
+                dataNascimento,
+                emailPrincipal,
+                telefonePrincipal,
+                tipoValidacaoTelefone,
+                senhaPura,
+                vinculoSocialPendente,
+                null,
+                aplicacaoId,
+                sistemaSolicitante,
+                ipSolicitante,
+                userAgentSolicitante,
+                null
         );
     }
 
@@ -346,6 +533,124 @@ public class CadastroContaInternaServico {
                                                      final String sistemaSolicitante,
                                                      final String ipSolicitante,
                                                      final String userAgentSolicitante) {
+        return cadastrarPublico(
+                tipoPessoa,
+                nomeCompleto,
+                nomeFantasia,
+                usuario,
+                sexo,
+                paisNascimento,
+                dataNascimento,
+                emailPrincipal,
+                telefonePrincipal,
+                tipoValidacaoTelefone,
+                senhaPura,
+                vinculoSocialPendente,
+                conviteOrganizacional,
+                sistemaSolicitante,
+                sistemaSolicitante,
+                ipSolicitante,
+                userAgentSolicitante,
+                null
+        );
+    }
+
+    public CadastroInternoRealizado cadastrarPublico(final TipoPessoaCadastro tipoPessoa,
+                                                     final String nomeCompleto,
+                                                     final String nomeFantasia,
+                                                     final String usuario,
+                                                     final SexoPessoaCadastro sexo,
+                                                     final String paisNascimento,
+                                                     final LocalDate dataNascimento,
+                                                     final String emailPrincipal,
+                                                     final String telefonePrincipal,
+                                                     final CanalValidacaoTelefoneCadastro tipoValidacaoTelefone,
+                                                     final String senhaPura,
+                                                     final VinculoSocialPendenteCadastro vinculoSocialPendente,
+                                                     final ConviteOrganizacionalValidado conviteOrganizacional,
+                                                     final String sistemaSolicitante,
+                                                     final String ipSolicitante,
+                                                     final String userAgentSolicitante,
+                                                     final ContextoSolicitacaoFluxoPublico contextoSolicitacao) {
+        return cadastrarPublico(
+                tipoPessoa,
+                nomeCompleto,
+                nomeFantasia,
+                usuario,
+                sexo,
+                paisNascimento,
+                dataNascimento,
+                emailPrincipal,
+                telefonePrincipal,
+                tipoValidacaoTelefone,
+                senhaPura,
+                vinculoSocialPendente,
+                conviteOrganizacional,
+                sistemaSolicitante,
+                sistemaSolicitante,
+                ipSolicitante,
+                userAgentSolicitante,
+                contextoSolicitacao
+        );
+    }
+
+    public CadastroInternoRealizado cadastrarPublico(final TipoPessoaCadastro tipoPessoa,
+                                                     final String nomeCompleto,
+                                                     final String nomeFantasia,
+                                                     final String usuario,
+                                                     final SexoPessoaCadastro sexo,
+                                                     final String paisNascimento,
+                                                     final LocalDate dataNascimento,
+                                                     final String emailPrincipal,
+                                                     final String telefonePrincipal,
+                                                     final CanalValidacaoTelefoneCadastro tipoValidacaoTelefone,
+                                                     final String senhaPura,
+                                                     final VinculoSocialPendenteCadastro vinculoSocialPendente,
+                                                     final ConviteOrganizacionalValidado conviteOrganizacional,
+                                                     final String aplicacaoId,
+                                                     final String sistemaSolicitante,
+                                                     final String ipSolicitante,
+                                                     final String userAgentSolicitante) {
+        return cadastrarPublico(
+                tipoPessoa,
+                nomeCompleto,
+                nomeFantasia,
+                usuario,
+                sexo,
+                paisNascimento,
+                dataNascimento,
+                emailPrincipal,
+                telefonePrincipal,
+                tipoValidacaoTelefone,
+                senhaPura,
+                vinculoSocialPendente,
+                conviteOrganizacional,
+                aplicacaoId,
+                sistemaSolicitante,
+                ipSolicitante,
+                userAgentSolicitante,
+                null
+        );
+    }
+
+    public CadastroInternoRealizado cadastrarPublico(final TipoPessoaCadastro tipoPessoa,
+                                                     final String nomeCompleto,
+                                                     final String nomeFantasia,
+                                                     final String usuario,
+                                                     final SexoPessoaCadastro sexo,
+                                                     final String paisNascimento,
+                                                     final LocalDate dataNascimento,
+                                                     final String emailPrincipal,
+                                                     final String telefonePrincipal,
+                                                     final CanalValidacaoTelefoneCadastro tipoValidacaoTelefone,
+                                                     final String senhaPura,
+                                                     final VinculoSocialPendenteCadastro vinculoSocialPendente,
+                                                     final ConviteOrganizacionalValidado conviteOrganizacional,
+                                                     final String aplicacaoId,
+                                                     final String sistemaSolicitante,
+                                                     final String ipSolicitante,
+                                                     final String userAgentSolicitante,
+                                                     final ContextoSolicitacaoFluxoPublico contextoSolicitacao) {
         return cadastrarCompleto(
                 Objects.requireNonNull(tipoPessoa, "tipoPessoa é obrigatório"),
                 nomeCompleto,
@@ -360,9 +665,11 @@ public class CadastroContaInternaServico {
                 senhaPura,
                 vinculoSocialPendente,
                 conviteOrganizacional,
+                aplicacaoId,
                 sistemaSolicitante,
                 ipSolicitante,
-                userAgentSolicitante
+                userAgentSolicitante,
+                contextoSolicitacao
         );
     }
 
@@ -381,6 +688,54 @@ public class CadastroContaInternaServico {
                                                                           final String codigo,
                                                                           final String codigoTelefone) {
         return confirmarEmailDetalhado(cadastroId, codigo, codigoTelefone);
+    }
+
+    public ConfirmacaoEmailCadastroPublicoRealizada confirmarTelefonePublico(final UUID cadastroId,
+                                                                             final String codigoTelefone) {
+        if (cadastroId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "CadastroId é obrigatório.");
+        }
+        CadastroConta cadastroConta = cadastroContaRepositorio.findByCadastroId(cadastroId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Cadastro não encontrado."));
+        if (!cadastroConta.possuiTelefoneParaValidacao()) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "O cadastro não exige confirmação de telefone."
+            );
+        }
+        if (!cadastroConta.emailJaConfirmado()) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "O e-mail ainda precisa ser confirmado antes do telefone."
+            );
+        }
+        if (cadastroConta.etapaTelefoneConcluida()) {
+            return montarRespostaConfirmacao(cadastroConta, cadastroConta.getStatus().name());
+        }
+
+        OffsetDateTime agora = OffsetDateTime.now(clock);
+        if (cadastroConta.codigoTelefoneExpirado(agora)) {
+            throw new ResponseStatusException(HttpStatus.GONE, "O código de confirmação do cadastro expirou.");
+        }
+
+        String codigoTelefoneNormalizado = obrigatorio(
+                codigoTelefone,
+                "codigoTelefone",
+                "Código de confirmação do telefone é obrigatório."
+        );
+        if (!Objects.equals(
+                cadastroConta.getCodigoTelefoneHash(),
+                hashCodigoTelefone(
+                        codigoTelefoneNormalizado,
+                        cadastroConta.getTelefonePrincipal(),
+                        cadastroConta.getSubjectRemoto()))) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "O código de confirmação do telefone informado é inválido."
+            );
+        }
+
+        return finalizarCadastroPublico(cadastroConta, agora);
     }
 
     public boolean usuarioDisponivelPublico(final String usuario) {
@@ -405,6 +760,48 @@ public class CadastroContaInternaServico {
                 .map(CadastroConta::getCadastroId);
     }
 
+    public Optional<CadastroConta> buscarCadastroPendenteEmailPublicoPorProjeto(final String aplicacaoId,
+                                                                                 final String emailPrincipal) {
+        ProjetoFluxoPublicoResolvido projeto = resolvedorProjetoFluxoPublico.resolverAtivo(aplicacaoId);
+        String emailNormalizado = obrigatorio(emailPrincipal, "emailPrincipal").toLowerCase(Locale.ROOT);
+        return cadastroContaRepositorio.findAllByEmailPrincipal(emailNormalizado).stream()
+                .filter(cadastro -> Objects.equals(cadastro.getClienteEcossistemaId(), projeto.clienteEcossistemaId()))
+                .filter(this::cadastroPendenteEmail)
+                .findFirst();
+    }
+
+    public void definirSenhaCadastroPendentePublico(final UUID cadastroId,
+                                                    final String senhaPura,
+                                                    final String confirmacaoSenha) {
+        if (cadastroId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "CadastroId é obrigatório.");
+        }
+        CadastroConta cadastroConta = cadastroContaRepositorio.findByCadastroId(cadastroId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Cadastro não encontrado."));
+        if (!cadastroConta.emailJaConfirmado() || !cadastroConta.etapaTelefoneConcluida()) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "A conta ainda precisa validar os contatos antes de definir uma nova senha."
+            );
+        }
+        String senhaNormalizada = obrigatorio(senhaPura, "senhaPura");
+        String confirmacaoNormalizada = obrigatorio(confirmacaoSenha, "confirmacaoSenha");
+        if (!Objects.equals(senhaNormalizada, confirmacaoNormalizada)) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "A confirmação de senha não confere.");
+        }
+        RecuperacaoSenhaService.validarPoliticaSenha(senhaNormalizada);
+        clienteAdministracaoCadastroKeycloak.redefinirSenha(cadastroConta.getSubjectRemoto(), senhaNormalizada);
+    }
+
+    public StatusCadastroPublico consultarStatusCadastroPublico(final UUID cadastroId) {
+        if (cadastroId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "CadastroId é obrigatório.");
+        }
+        CadastroConta cadastroConta = cadastroContaRepositorio.findByCadastroId(cadastroId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Cadastro não encontrado."));
+        return montarStatusCadastroPublico(cadastroConta);
+    }
+
     public void reenviarCodigoEmail(final UUID cadastroId) {
         if (cadastroId == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "CadastroId é obrigatório.");
@@ -420,30 +817,56 @@ public class CadastroContaInternaServico {
 
         OffsetDateTime agora = OffsetDateTime.now(clock);
         String codigoClaro = gerarCodigoNumerico();
-        String codigoTelefoneClaro = cadastroConta.possuiTelefoneParaValidacao() ? gerarCodigoNumerico() : null;
         cadastroConta.atualizarCodigoEmail(
                 hashCodigoEmail(codigoClaro, cadastroConta.getEmailPrincipal(), cadastroConta.getSubjectRemoto()),
                 agora,
                 agora.plusHours(dispositivoProperties.getCodigo().getExpiracaoHoras()),
                 agora
         );
-        if (codigoTelefoneClaro != null) {
-            cadastroConta.definirCodigoTelefone(
-                    hashCodigoTelefone(
-                            codigoTelefoneClaro,
-                            cadastroConta.getTelefonePrincipal(),
-                            cadastroConta.getSubjectRemoto()
-                    ),
-                    agora,
-                    agora.plusHours(dispositivoProperties.getCodigo().getExpiracaoHoras()),
-                    agora
+        sincronizarCadastroSeConfigurado(cadastroConta);
+        try {
+            canalEnvioCodigoCadastroEmail.enviar(cadastroConta, codigoClaro);
+        } catch (EntregaEmailException ex) {
+            throw traduzirFalhaEnvioCodigoCadastro(cadastroConta, ex);
+        }
+    }
+
+    public void reenviarCodigoTelefone(final UUID cadastroId) {
+        if (cadastroId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "CadastroId é obrigatório.");
+        }
+        CadastroConta cadastroConta = cadastroContaRepositorio.findByCadastroId(cadastroId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Cadastro não encontrado."));
+        if (!cadastroConta.possuiTelefoneParaValidacao()) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "O cadastro não exige confirmação de telefone."
             );
         }
-        sincronizarCadastroSeConfigurado(cadastroConta);
-        canalEnvioCodigoCadastroEmail.enviar(cadastroConta, codigoClaro);
-        if (codigoTelefoneClaro != null) {
-            canalEnvioCodigoCadastroTelefone.enviar(cadastroConta, codigoTelefoneClaro);
+        if (!cadastroConta.emailJaConfirmado()) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "O e-mail ainda precisa ser confirmado antes do telefone."
+            );
         }
+        if (cadastroConta.etapaTelefoneConcluida()) {
+            return;
+        }
+
+        OffsetDateTime agora = OffsetDateTime.now(clock);
+        String codigoTelefoneClaro = gerarCodigoNumerico();
+        cadastroConta.definirCodigoTelefone(
+                hashCodigoTelefone(
+                        codigoTelefoneClaro,
+                        cadastroConta.getTelefonePrincipal(),
+                        cadastroConta.getSubjectRemoto()
+                ),
+                agora,
+                agora.plusHours(dispositivoProperties.getCodigo().getExpiracaoHoras()),
+                agora
+        );
+        sincronizarCadastroSeConfigurado(cadastroConta);
+        canalEnvioCodigoCadastroTelefone.enviar(cadastroConta, codigoTelefoneClaro);
     }
 
     public void cancelarCadastroPendentePublico(final UUID cadastroId) {
@@ -457,10 +880,9 @@ public class CadastroContaInternaServico {
 
     public int expurgarCadastrosPendentesExpirados() {
         OffsetDateTime limite = OffsetDateTime.now(clock).minusHours(48);
-        List<CadastroConta> expirados = cadastroContaRepositorio.findByStatusAndCriadoEmBefore(
-                StatusCadastroConta.PENDENTE_EMAIL,
-                limite
-        );
+        List<CadastroConta> expirados = cadastroContaRepositorio.findByCriadoEmBefore(limite).stream()
+                .filter(this::cadastroPendenteEmail)
+                .toList();
         int removidos = 0;
         for (CadastroConta cadastroConta : expirados) {
             try {
@@ -491,9 +913,11 @@ public class CadastroContaInternaServico {
                                                        final String senhaPura,
                                                        final VinculoSocialPendenteCadastro vinculoSocialPendente,
                                                        final ConviteOrganizacionalValidado conviteOrganizacional,
+                                                       final String aplicacaoId,
                                                        final String sistemaSolicitante,
                                                        final String ipSolicitante,
-                                                       final String userAgentSolicitante) {
+                                                       final String userAgentSolicitante,
+                                                       final ContextoSolicitacaoFluxoPublico contextoSolicitacao) {
         String nomeNormalizado = obrigatorio(nomeCompleto, "nomeCompleto");
         String emailNormalizado = obrigatorio(emailPrincipal, "emailPrincipal").toLowerCase(Locale.ROOT);
         String telefoneNormalizado = normalizarOpcional(telefonePrincipal);
@@ -507,19 +931,43 @@ public class CadastroContaInternaServico {
         String usuarioNormalizado = normalizarUsuarioOpcional(usuario);
         String nomeFantasiaNormalizado = normalizarOpcional(nomeFantasia);
         String paisNascimentoNormalizado = normalizarOpcional(paisNascimento);
+        boolean fluxoCadastroPublico = usuarioNormalizado != null && !usuarioNormalizado.isBlank();
+        ProjetoFluxoPublicoResolvido projeto = aplicacaoId == null || aplicacaoId.isBlank()
+                ? null
+                : resolvedorProjetoFluxoPublico.resolverAtivo(aplicacaoId);
+        ContextoSolicitacaoFluxoPublico contextoResolvido = resolvedorContextoFluxoPublico.resolver(
+                emailNormalizado,
+                contextoSolicitacao
+        );
+        if (projeto != null) {
+            contextoResolvido = contextoResolvido.mesclarFaltantes(projeto.comoContextoPadrao());
+        }
 
         validarDuplicidadeUsuario(usuarioNormalizado);
         validarDuplicidadeEmail(emailNormalizado);
 
-        CadastroKeycloakProvisionado cadastroKeycloak = clienteAdministracaoCadastroKeycloak.criarUsuarioPendente(
-                nomeNormalizado,
-                emailNormalizado,
-                senhaNormalizada
-        );
+        CadastroKeycloakProvisionado cadastroKeycloak;
+        try {
+            cadastroKeycloak = clienteAdministracaoCadastroKeycloak.criarUsuarioPendente(
+                    nomeNormalizado,
+                    emailNormalizado,
+                    senhaNormalizada
+            );
+        } catch (ResponseStatusException exception) {
+            if (exception.getStatusCode() == HttpStatus.CONFLICT) {
+                throw criarErroEmailIndisponivel();
+            }
+            throw exception;
+        }
 
         OffsetDateTime agora = OffsetDateTime.now(clock);
         String codigoClaro = gerarCodigoNumerico();
-        String codigoTelefoneClaro = telefoneNormalizado == null ? null : gerarCodigoNumerico();
+        boolean exigeValidacaoTelefone = projeto != null
+                ? projeto.exigeValidacaoTelefone()
+                : !fluxoCadastroPublico && telefoneNormalizado != null;
+        String codigoTelefoneClaro = exigeValidacaoTelefone && telefoneNormalizado != null
+                ? gerarCodigoNumerico()
+                : null;
         CadastroConta cadastroConta = new CadastroConta(
                 UUID.randomUUID(),
                 cadastroKeycloak.subjectRemoto(),
@@ -540,7 +988,8 @@ public class CadastroContaInternaServico {
                 ipSolicitante,
                 userAgentSolicitante,
                 agora,
-                agora
+                agora,
+                contextoResolvido
         );
         if (codigoTelefoneClaro != null) {
             cadastroConta.definirCodigoTelefone(
@@ -568,6 +1017,11 @@ public class CadastroContaInternaServico {
                     agora
             );
         }
+        cadastroConta.registrarProjetoFluxoPublico(
+                projeto == null ? null : projeto.clienteEcossistemaId(),
+                exigeValidacaoTelefone,
+                agora
+        );
         cadastroConta = cadastroContaRepositorio.save(cadastroConta);
 
         if (provisionamentoIdentidadeServiceCompat != null) {
@@ -580,8 +1034,22 @@ public class CadastroContaInternaServico {
         }
 
         sincronizarCadastroSeConfigurado(cadastroConta);
-        canalEnvioCodigoCadastroEmail.enviar(cadastroConta, codigoClaro);
-        if (codigoTelefoneClaro != null) {
+        try {
+            canalEnvioCodigoCadastroEmail.enviar(cadastroConta, codigoClaro);
+        } catch (EntregaEmailException ex) {
+            try {
+                removerCadastroPendente(cadastroConta);
+            } catch (RuntimeException cleanupException) {
+                LOGGER.warn(
+                        "Falha ao reverter cadastro pendente apos erro de envio cadastroId={} subjectRemoto={}",
+                        cadastroConta.getCadastroId(),
+                        cadastroConta.getSubjectRemoto(),
+                        cleanupException
+                );
+            }
+            throw traduzirFalhaEnvioCodigoCadastro(cadastroConta, ex);
+        }
+        if (exigeValidacaoTelefone && codigoTelefoneClaro != null) {
             canalEnvioCodigoCadastroTelefone.enviar(cadastroConta, codigoTelefoneClaro);
         }
 
@@ -604,11 +1072,17 @@ public class CadastroContaInternaServico {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Cadastro não encontrado."));
 
         if (cadastroConta.emailJaConfirmado()) {
+            if (cadastroConta.possuiTelefoneParaValidacao()
+                    && !cadastroConta.etapaTelefoneConcluida()
+                    && codigoTelefone != null
+                    && !codigoTelefone.isBlank()) {
+                return confirmarTelefonePublico(cadastroId, codigoTelefone);
+            }
             return montarRespostaConfirmacao(cadastroConta, cadastroConta.getStatus().name());
         }
 
         OffsetDateTime agora = OffsetDateTime.now(clock);
-        if (cadastroConta.codigoEmailExpirado(agora) || cadastroConta.codigoTelefoneExpirado(agora)) {
+        if (cadastroConta.codigoEmailExpirado(agora)) {
             throw new ResponseStatusException(HttpStatus.GONE, "O código de confirmação do cadastro expirou.");
         }
         if (cadastroConta.getTentativasConfirmacaoEmail() >= dispositivoProperties.getCodigo().getTentativasMaximas()) {
@@ -624,12 +1098,21 @@ public class CadastroContaInternaServico {
                 hashCodigoEmail(codigoNormalizado, cadastroConta.getEmailPrincipal(), cadastroConta.getSubjectRemoto()))) {
             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "O código de confirmação informado é inválido.");
         }
-        if (ehFluxoCadastroPublico(cadastroConta) && cadastroConta.possuiTelefoneParaValidacao()) {
+        cadastroConta.marcarEmailConfirmado(agora);
+        sincronizarCadastroSeConfigurado(cadastroConta);
+
+        if (ehFluxoCadastroPublico(cadastroConta)
+                && cadastroConta.possuiTelefoneParaValidacao()
+                && codigoTelefone != null
+                && !codigoTelefone.isBlank()) {
             String codigoTelefoneNormalizado = obrigatorio(
                     codigoTelefone,
                     "codigoTelefone",
                     "Código de confirmação do telefone é obrigatório."
             );
+            if (cadastroConta.codigoTelefoneExpirado(agora)) {
+                throw new ResponseStatusException(HttpStatus.GONE, "O código de confirmação do cadastro expirou.");
+            }
             if (!Objects.equals(
                     cadastroConta.getCodigoTelefoneHash(),
                     hashCodigoTelefone(
@@ -641,8 +1124,18 @@ public class CadastroContaInternaServico {
                         "O código de confirmação do telefone informado é inválido."
                 );
             }
+            return finalizarCadastroPublico(cadastroConta, agora);
         }
 
+        if (ehFluxoCadastroPublico(cadastroConta) && cadastroConta.possuiTelefoneParaValidacao()) {
+            return montarRespostaConfirmacao(cadastroConta, "EMAIL_CONFIRMADO");
+        }
+
+        return finalizarCadastroPublico(cadastroConta, agora);
+    }
+
+    private ConfirmacaoEmailCadastroPublicoRealizada finalizarCadastroPublico(final CadastroConta cadastroConta,
+                                                                              final OffsetDateTime agora) {
         String statusUsuario = "EMAIL_CONFIRMADO";
         if (ehFluxoCadastroPublico(cadastroConta)) {
             ProvisionadorPerfilDominioServico provisionador = Objects.requireNonNull(
@@ -717,14 +1210,33 @@ public class CadastroContaInternaServico {
         String statusUsuario = contexto == null || contexto.statusUsuario() == null || contexto.statusUsuario().isBlank()
                 ? statusUsuarioPadrao
                 : contexto.statusUsuario();
+        boolean telefoneObrigatorio = cadastroConta.possuiTelefoneParaValidacao();
+        boolean telefoneConfirmado = cadastroConta.telefoneJaConfirmado();
+        boolean podeAutenticar = cadastroConta.emailJaConfirmado() && cadastroConta.etapaTelefoneConcluida();
         return new ConfirmacaoEmailCadastroPublicoRealizada(
                 cadastroConta.getCadastroId(),
                 cadastroConta.getSubjectRemoto(),
                 cadastroConta.getEmailPrincipal(),
                 Objects.requireNonNullElse(usuarioId, ""),
                 statusUsuario,
-                true,
-                true
+                cadastroConta.emailJaConfirmado(),
+                telefoneConfirmado,
+                telefoneObrigatorio,
+                podeAutenticar,
+                resolverProximoPasso(cadastroConta)
+        );
+    }
+
+    private StatusCadastroPublico montarStatusCadastroPublico(final CadastroConta cadastroConta) {
+        return new StatusCadastroPublico(
+                cadastroConta.getCadastroId(),
+                cadastroConta.getEmailPrincipal(),
+                Objects.requireNonNullElse(cadastroConta.getTelefonePrincipal(), ""),
+                cadastroConta.emailJaConfirmado(),
+                cadastroConta.telefoneJaConfirmado(),
+                cadastroConta.possuiTelefoneParaValidacao(),
+                cadastroConta.emailJaConfirmado() && cadastroConta.etapaTelefoneConcluida(),
+                resolverProximoPasso(cadastroConta)
         );
     }
 
@@ -748,19 +1260,20 @@ public class CadastroContaInternaServico {
     private void validarDuplicidadeEmail(final String emailNormalizado) {
         Optional<CadastroConta> cadastroExistente = cadastroContaRepositorio.findByEmailPrincipal(emailNormalizado);
         if (cadastroExistente.isPresent()) {
-            throw FluxoPublicoException.conflito(
-                    "cadastro_nao_disponivel",
-                    "Não foi possível concluir o cadastro com os dados informados."
-            );
+            throw criarErroEmailIndisponivel();
         }
         clienteContextoPessoaPerfil.buscarPorEmail(emailNormalizado)
                 .ifPresent(contexto -> {
                     notificarTentativaCadastroContaExistente(emailNormalizado);
-                    throw FluxoPublicoException.conflito(
-                            "cadastro_nao_disponivel",
-                            "Não foi possível concluir o cadastro com os dados informados."
-                    );
+                    throw criarErroEmailIndisponivel();
                 });
+    }
+
+    private FluxoPublicoException criarErroEmailIndisponivel() {
+        return FluxoPublicoException.conflito(
+                "email_indisponivel",
+                "Já existe uma conta com o e-mail informado. Entre ou recupere a senha."
+        );
     }
 
     private ProvedorVinculoSocial resolverProvedorVinculoSocialPendente(final CadastroConta cadastroConta) {
@@ -904,8 +1417,45 @@ public class CadastroContaInternaServico {
         }
     }
 
+    private FluxoPublicoException traduzirFalhaEnvioCodigoCadastro(final CadastroConta cadastroConta,
+                                                                   final EntregaEmailException excecao) {
+        LOGGER.warn(
+                "cadastro_publico_envio_email_falhou codigo={} cadastroId={} subjectRemoto={} sistema={}",
+                excecao.getCodigo(),
+                cadastroConta.getCadastroId(),
+                cadastroConta.getSubjectRemoto(),
+                cadastroConta.getSistemaSolicitante(),
+                excecao
+        );
+        if (auditoriaService != null) {
+            auditoriaService.registrarEvento(
+                    "CADASTRO_EMAIL_FALHA",
+                    cadastroConta.getSubjectRemoto(),
+                    "codigo=" + excecao.getCodigo()
+                            + ";cadastroId=" + cadastroConta.getCadastroId()
+                            + ";sistema=" + Objects.requireNonNullElse(cadastroConta.getSistemaSolicitante(), "")
+            );
+        }
+        return new FluxoPublicoException(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                excecao.getCodigo(),
+                excecao.getMensagemPublica()
+        );
+    }
+
     private boolean cadastroPendenteEmail(final CadastroConta cadastroConta) {
-        return cadastroConta.getStatus() == StatusCadastroConta.PENDENTE_EMAIL;
+        return cadastroConta != null
+                && (!cadastroConta.emailJaConfirmado() || !cadastroConta.etapaTelefoneConcluida());
+    }
+
+    private String resolverProximoPasso(final CadastroConta cadastroConta) {
+        if (!cadastroConta.emailJaConfirmado()) {
+            return "VALIDAR_EMAIL";
+        }
+        if (!cadastroConta.etapaTelefoneConcluida()) {
+            return "VALIDAR_TELEFONE";
+        }
+        return "LOGIN";
     }
 
     private void removerCadastroPendente(final CadastroConta cadastroConta) {

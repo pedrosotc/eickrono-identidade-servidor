@@ -48,12 +48,27 @@ public class FormaAcesso {
     @Column(name = "verificado_em")
     private OffsetDateTime verificadoEm;
 
+    @Column(name = "nome_exibicao_externo")
+    private String nomeExibicaoExterno;
+
+    @Column(name = "url_avatar_externo", length = 2048)
+    private String urlAvatarExterno;
+
+    @Column(name = "avatar_externo_atualizado_em")
+    private OffsetDateTime avatarExternoAtualizadoEm;
+
     protected FormaAcesso() {
         // Construtor protegido para JPA.
     }
 
     public FormaAcesso(Pessoa pessoa, TipoFormaAcesso tipo, String provedor, String identificador,
                        boolean principal, OffsetDateTime criadoEm, OffsetDateTime verificadoEm) {
+        this(pessoa, tipo, provedor, identificador, principal, criadoEm, verificadoEm, null, null, null);
+    }
+
+    public FormaAcesso(Pessoa pessoa, TipoFormaAcesso tipo, String provedor, String identificador,
+                       boolean principal, OffsetDateTime criadoEm, OffsetDateTime verificadoEm,
+                       String nomeExibicaoExterno, String urlAvatarExterno, OffsetDateTime avatarExternoAtualizadoEm) {
         this.pessoa = Objects.requireNonNull(pessoa, "pessoa é obrigatória");
         this.tipo = Objects.requireNonNull(tipo, "tipo é obrigatório");
         this.provedor = Objects.requireNonNull(provedor, "provedor é obrigatório");
@@ -61,6 +76,9 @@ public class FormaAcesso {
         this.principal = principal;
         this.criadoEm = Objects.requireNonNull(criadoEm, "criadoEm é obrigatório");
         this.verificadoEm = verificadoEm;
+        this.nomeExibicaoExterno = nomeExibicaoExterno;
+        this.urlAvatarExterno = urlAvatarExterno;
+        this.avatarExternoAtualizadoEm = avatarExternoAtualizadoEm;
     }
 
     public Long getId() {
@@ -95,9 +113,34 @@ public class FormaAcesso {
         return verificadoEm;
     }
 
+    public String getNomeExibicaoExterno() {
+        return nomeExibicaoExterno;
+    }
+
+    public String getUrlAvatarExterno() {
+        return urlAvatarExterno;
+    }
+
+    public OffsetDateTime getAvatarExternoAtualizadoEm() {
+        return avatarExternoAtualizadoEm;
+    }
+
     public void atualizarIdentificador(String novoIdentificador, boolean novoPrincipal, OffsetDateTime novoVerificadoEm) {
         this.identificador = Objects.requireNonNull(novoIdentificador, "identificador é obrigatório");
         this.principal = novoPrincipal;
         this.verificadoEm = novoVerificadoEm;
+    }
+
+    public void atualizarDadosExternos(final String nomeExibicaoExterno,
+                                       final String urlAvatarExterno,
+                                       final OffsetDateTime atualizadoEm) {
+        if (nomeExibicaoExterno != null && !nomeExibicaoExterno.isBlank()) {
+            this.nomeExibicaoExterno = nomeExibicaoExterno.trim();
+        }
+        if (urlAvatarExterno != null && !urlAvatarExterno.isBlank()) {
+            this.urlAvatarExterno = urlAvatarExterno.trim();
+            this.avatarExternoAtualizadoEm = Objects.requireNonNull(
+                    atualizadoEm, "atualizadoEm é obrigatório");
+        }
     }
 }

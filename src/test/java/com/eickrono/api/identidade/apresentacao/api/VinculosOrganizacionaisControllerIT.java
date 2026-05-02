@@ -48,7 +48,6 @@ class VinculosOrganizacionaisControllerIT {
     private ClienteContextoPessoaPerfil clienteContextoPessoaPerfil;
 
     @BeforeEach
-    @SuppressWarnings("unused")
     void limparEstado() {
         vinculoOrganizacionalRepositorio.deleteAll();
     }

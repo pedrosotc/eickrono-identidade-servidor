@@ -10,6 +10,11 @@ public class SessaoInternaKeycloakProperties {
     private String realm = "eickrono";
     private String clientId = "app-flutter-local";
     private String clientSecret = "";
+    private String scope = "";
+    private String tokenExchangeClientId = "";
+    private String tokenExchangeClientSecret = "";
+    private String tokenExchangeAudience = "";
+    private String tokenExchangeScope = "";
     private String passwordPepper = "";
     private Duration timeout = Duration.ofSeconds(5);
 
@@ -43,6 +48,46 @@ public class SessaoInternaKeycloakProperties {
 
     public void setClientSecret(final String clientSecret) {
         this.clientSecret = clientSecret;
+    }
+
+    public String getScope() {
+        return scope;
+    }
+
+    public void setScope(final String scope) {
+        this.scope = scope;
+    }
+
+    public String getTokenExchangeClientId() {
+        return tokenExchangeClientId;
+    }
+
+    public void setTokenExchangeClientId(final String tokenExchangeClientId) {
+        this.tokenExchangeClientId = tokenExchangeClientId;
+    }
+
+    public String getTokenExchangeClientSecret() {
+        return tokenExchangeClientSecret;
+    }
+
+    public void setTokenExchangeClientSecret(final String tokenExchangeClientSecret) {
+        this.tokenExchangeClientSecret = tokenExchangeClientSecret;
+    }
+
+    public String getTokenExchangeAudience() {
+        return tokenExchangeAudience;
+    }
+
+    public void setTokenExchangeAudience(final String tokenExchangeAudience) {
+        this.tokenExchangeAudience = tokenExchangeAudience;
+    }
+
+    public String getTokenExchangeScope() {
+        return tokenExchangeScope;
+    }
+
+    public void setTokenExchangeScope(final String tokenExchangeScope) {
+        this.tokenExchangeScope = tokenExchangeScope;
     }
 
     public String getPasswordPepper() {

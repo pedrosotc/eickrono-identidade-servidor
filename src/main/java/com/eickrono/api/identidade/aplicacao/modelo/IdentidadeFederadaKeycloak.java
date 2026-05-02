@@ -9,7 +9,14 @@ import java.util.Objects;
 public record IdentidadeFederadaKeycloak(
         ProvedorVinculoSocial provedor,
         String identificadorExterno,
-        String nomeUsuarioExterno) {
+        String nomeUsuarioExterno,
+        String nomeExibicaoExterno,
+        String urlAvatarExterno) {
+
+    public IdentidadeFederadaKeycloak(
+            ProvedorVinculoSocial provedor, String identificadorExterno, String nomeUsuarioExterno) {
+        this(provedor, identificadorExterno, nomeUsuarioExterno, null, null);
+    }
 
     public IdentidadeFederadaKeycloak {
         Objects.requireNonNull(provedor, "provedor é obrigatório");
@@ -30,5 +37,12 @@ public record IdentidadeFederadaKeycloak(
             return nomeUsuarioExterno.trim();
         }
         return identificadorCanonico();
+    }
+
+    public String nomeExibicaoResolvido() {
+        if (nomeExibicaoExterno != null && !nomeExibicaoExterno.isBlank()) {
+            return nomeExibicaoExterno.trim();
+        }
+        return identificadorExibicao();
     }
 }

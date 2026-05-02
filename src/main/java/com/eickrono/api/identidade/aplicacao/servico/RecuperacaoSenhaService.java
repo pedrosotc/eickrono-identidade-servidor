@@ -1,10 +1,16 @@
 package com.eickrono.api.identidade.aplicacao.servico;
 
+import com.eickrono.api.identidade.aplicacao.excecao.EntregaEmailException;
+import com.eickrono.api.identidade.aplicacao.excecao.FluxoPublicoException;
 import com.eickrono.api.identidade.aplicacao.modelo.ConfirmacaoCodigoRecuperacaoSenhaRealizada;
+import com.eickrono.api.identidade.aplicacao.modelo.ContextoSolicitacaoFluxoPublico;
+import com.eickrono.api.identidade.aplicacao.modelo.ProjetoFluxoPublicoResolvido;
 import com.eickrono.api.identidade.aplicacao.modelo.RecuperacaoSenhaIniciada;
 import com.eickrono.api.identidade.aplicacao.modelo.UsuarioCadastroKeycloakExistente;
+import com.eickrono.api.identidade.dominio.modelo.CadastroConta;
 import com.eickrono.api.identidade.dominio.modelo.MotivoRevogacaoToken;
 import com.eickrono.api.identidade.dominio.modelo.RecuperacaoSenha;
+import com.eickrono.api.identidade.dominio.repositorio.CadastroContaRepositorio;
 import com.eickrono.api.identidade.dominio.repositorio.RecuperacaoSenhaRepositorio;
 import com.eickrono.api.identidade.infraestrutura.configuracao.DispositivoProperties;
 import jakarta.transaction.Transactional;
@@ -36,24 +42,59 @@ public class RecuperacaoSenhaService {
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final RecuperacaoSenhaRepositorio recuperacaoSenhaRepositorio;
+    private final CadastroContaRepositorio cadastroContaRepositorio;
     private final ClienteAdministracaoCadastroKeycloak clienteAdministracaoCadastroKeycloak;
     private final CanalEnvioCodigoRecuperacaoSenhaEmail canalEnvioCodigoRecuperacaoSenhaEmail;
     private final DispositivoProperties dispositivoProperties;
     private final Clock clock;
     private final TokenDispositivoService tokenDispositivoService;
     private final SincronizacaoModeloMultiappService sincronizacaoModeloMultiappService;
+    private final AuditoriaService auditoriaService;
+    private final ResolvedorContextoFluxoPublico resolvedorContextoFluxoPublico;
+    private final ResolvedorProjetoFluxoPublico resolvedorProjetoFluxoPublico;
     private final HexFormat hexFormat = HexFormat.of();
 
     @Autowired
     public RecuperacaoSenhaService(final RecuperacaoSenhaRepositorio recuperacaoSenhaRepositorio,
+                                   final CadastroContaRepositorio cadastroContaRepositorio,
                                    final ClienteAdministracaoCadastroKeycloak clienteAdministracaoCadastroKeycloak,
                                    final CanalEnvioCodigoRecuperacaoSenhaEmail canalEnvioCodigoRecuperacaoSenhaEmail,
                                    final DispositivoProperties dispositivoProperties,
                                    final Clock clock,
                                    final TokenDispositivoService tokenDispositivoService,
-                                   final SincronizacaoModeloMultiappService sincronizacaoModeloMultiappService) {
+                                   final SincronizacaoModeloMultiappService sincronizacaoModeloMultiappService,
+                                   final AuditoriaService auditoriaService,
+                                   final ResolvedorProjetoFluxoPublico resolvedorProjetoFluxoPublico) {
+        this(
+                recuperacaoSenhaRepositorio,
+                cadastroContaRepositorio,
+                clienteAdministracaoCadastroKeycloak,
+                canalEnvioCodigoRecuperacaoSenhaEmail,
+                dispositivoProperties,
+                clock,
+                tokenDispositivoService,
+                sincronizacaoModeloMultiappService,
+                auditoriaService,
+                new ResolvedorContextoFluxoPublico(cadastroContaRepositorio, recuperacaoSenhaRepositorio),
+                resolvedorProjetoFluxoPublico
+        );
+    }
+
+    public RecuperacaoSenhaService(final RecuperacaoSenhaRepositorio recuperacaoSenhaRepositorio,
+                                   final CadastroContaRepositorio cadastroContaRepositorio,
+                                   final ClienteAdministracaoCadastroKeycloak clienteAdministracaoCadastroKeycloak,
+                                   final CanalEnvioCodigoRecuperacaoSenhaEmail canalEnvioCodigoRecuperacaoSenhaEmail,
+                                   final DispositivoProperties dispositivoProperties,
+                                   final Clock clock,
+                                   final TokenDispositivoService tokenDispositivoService,
+                                   final SincronizacaoModeloMultiappService sincronizacaoModeloMultiappService,
+                                   final AuditoriaService auditoriaService,
+                                   final ResolvedorContextoFluxoPublico resolvedorContextoFluxoPublico,
+                                   final ResolvedorProjetoFluxoPublico resolvedorProjetoFluxoPublico) {
         this.recuperacaoSenhaRepositorio = Objects.requireNonNull(
                 recuperacaoSenhaRepositorio, "recuperacaoSenhaRepositorio é obrigatório");
+        this.cadastroContaRepositorio = Objects.requireNonNull(
+                cadastroContaRepositorio, "cadastroContaRepositorio é obrigatório");
         this.clienteAdministracaoCadastroKeycloak = Objects.requireNonNull(
                 clienteAdministracaoCadastroKeycloak, "clienteAdministracaoCadastroKeycloak é obrigatório");
         this.canalEnvioCodigoRecuperacaoSenhaEmail = Objects.requireNonNull(
@@ -63,36 +104,68 @@ public class RecuperacaoSenhaService {
         this.tokenDispositivoService = Objects.requireNonNull(
                 tokenDispositivoService, "tokenDispositivoService é obrigatório");
         this.sincronizacaoModeloMultiappService = sincronizacaoModeloMultiappService;
+        this.auditoriaService = auditoriaService;
+        this.resolvedorContextoFluxoPublico = Objects.requireNonNull(
+                resolvedorContextoFluxoPublico, "resolvedorContextoFluxoPublico e obrigatorio");
+        this.resolvedorProjetoFluxoPublico = Objects.requireNonNull(
+                resolvedorProjetoFluxoPublico, "resolvedorProjetoFluxoPublico e obrigatorio");
     }
 
     public RecuperacaoSenhaService(final RecuperacaoSenhaRepositorio recuperacaoSenhaRepositorio,
+                                   final CadastroContaRepositorio cadastroContaRepositorio,
                                    final ClienteAdministracaoCadastroKeycloak clienteAdministracaoCadastroKeycloak,
                                    final CanalEnvioCodigoRecuperacaoSenhaEmail canalEnvioCodigoRecuperacaoSenhaEmail,
                                    final DispositivoProperties dispositivoProperties,
                                    final Clock clock,
-                                   final TokenDispositivoService tokenDispositivoService) {
+                                   final TokenDispositivoService tokenDispositivoService,
+                                   final ResolvedorProjetoFluxoPublico resolvedorProjetoFluxoPublico) {
         this(
                 recuperacaoSenhaRepositorio,
+                cadastroContaRepositorio,
                 clienteAdministracaoCadastroKeycloak,
                 canalEnvioCodigoRecuperacaoSenhaEmail,
                 dispositivoProperties,
                 clock,
                 tokenDispositivoService,
-                null
+                null,
+                null,
+                new ResolvedorContextoFluxoPublico(cadastroContaRepositorio, recuperacaoSenhaRepositorio),
+                resolvedorProjetoFluxoPublico
         );
     }
 
-    public RecuperacaoSenhaIniciada iniciar(final String emailPrincipal) {
+    public RecuperacaoSenhaIniciada iniciar(final String aplicacaoId, final String emailPrincipal) {
+        return iniciar(aplicacaoId, emailPrincipal, null);
+    }
+
+    public RecuperacaoSenhaIniciada iniciar(final String aplicacaoId,
+                                            final String emailPrincipal,
+                                            final ContextoSolicitacaoFluxoPublico contextoSolicitacao) {
+        ProjetoFluxoPublicoResolvido projeto = resolvedorProjetoFluxoPublico.resolverAtivo(aplicacaoId);
         String emailNormalizado = obrigatorio(emailPrincipal, "emailPrincipal").toLowerCase(Locale.ROOT);
+        Optional<UUID> cadastroPendenteMesmoProjeto = buscarCadastroPendenteMesmoProjeto(
+                emailNormalizado,
+                projeto.clienteEcossistemaId()
+        );
+        if (cadastroPendenteMesmoProjeto.isPresent()) {
+            return RecuperacaoSenhaIniciada.validarContatosCadastro(
+                    cadastroPendenteMesmoProjeto.get(),
+                    false
+            );
+        }
         OffsetDateTime agora = OffsetDateTime.now(clock);
         Optional<UsuarioCadastroKeycloakExistente> usuarioExistente =
                 clienteAdministracaoCadastroKeycloak.buscarUsuarioPorEmail(emailNormalizado);
         String codigoClaro = gerarCodigoNumerico();
+        ContextoSolicitacaoFluxoPublico contextoResolvido = resolvedorContextoFluxoPublico.resolver(
+                emailNormalizado,
+                contextoSolicitacao
+        ).mesclarFaltantes(projeto.comoContextoPadrao());
         String materialHash = usuarioExistente.map(UsuarioCadastroKeycloakExistente::subjectRemoto)
                 .filter(valor -> !valor.isBlank())
                 .orElse("email-desconhecido:" + UUID.randomUUID());
 
-        RecuperacaoSenha recuperacaoSenha = recuperacaoSenhaRepositorio.save(new RecuperacaoSenha(
+        RecuperacaoSenha recuperacaoSenha = new RecuperacaoSenha(
                 UUID.randomUUID(),
                 usuarioExistente.map(UsuarioCadastroKeycloakExistente::subjectRemoto).orElse(null),
                 emailNormalizado,
@@ -100,15 +173,25 @@ public class RecuperacaoSenhaService {
                 agora,
                 agora.plusHours(dispositivoProperties.getCodigo().getExpiracaoHoras()),
                 agora,
-                agora
-        ));
+                agora,
+                contextoResolvido
+        );
+        recuperacaoSenha.registrarProjetoFluxoPublico(
+                projeto.clienteEcossistemaId(),
+                projeto.exigeValidacaoTelefone()
+        );
+        recuperacaoSenha = recuperacaoSenhaRepositorio.save(recuperacaoSenha);
 
         sincronizarRecuperacaoSeConfigurado(recuperacaoSenha);
         if (usuarioExistente.isPresent()) {
-            canalEnvioCodigoRecuperacaoSenhaEmail.enviar(recuperacaoSenha, codigoClaro);
+            try {
+                canalEnvioCodigoRecuperacaoSenhaEmail.enviar(recuperacaoSenha, codigoClaro);
+            } catch (EntregaEmailException ex) {
+                throw traduzirFalhaEnvioRecuperacao(recuperacaoSenha, ex);
+            }
         }
 
-        return new RecuperacaoSenhaIniciada(recuperacaoSenha.getFluxoId());
+        return RecuperacaoSenhaIniciada.validarCodigoRecuperacao(recuperacaoSenha.getFluxoId());
     }
 
     public ConfirmacaoCodigoRecuperacaoSenhaRealizada confirmarCodigo(final UUID fluxoId, final String codigo) {
@@ -172,8 +255,49 @@ public class RecuperacaoSenhaService {
         );
         sincronizarRecuperacaoSeConfigurado(recuperacaoSenha);
         if (recuperacaoSenha.possuiDestinoReal()) {
-            canalEnvioCodigoRecuperacaoSenhaEmail.enviar(recuperacaoSenha, codigoClaro);
+            try {
+                canalEnvioCodigoRecuperacaoSenhaEmail.enviar(recuperacaoSenha, codigoClaro);
+            } catch (EntregaEmailException ex) {
+                throw traduzirFalhaEnvioRecuperacao(recuperacaoSenha, ex);
+            }
         }
+    }
+
+    private FluxoPublicoException traduzirFalhaEnvioRecuperacao(final RecuperacaoSenha recuperacaoSenha,
+                                                                final EntregaEmailException excecao) {
+        LOGGER.warn(
+                "recuperacao_senha_envio_email_falhou codigo={} fluxoId={} subjectRemoto={}",
+                excecao.getCodigo(),
+                recuperacaoSenha.getFluxoId(),
+                recuperacaoSenha.getSubjectRemoto(),
+                excecao
+        );
+        if (auditoriaService != null) {
+            auditoriaService.registrarEvento(
+                    "RECUPERACAO_EMAIL_FALHA",
+                    Objects.requireNonNullElse(recuperacaoSenha.getSubjectRemoto(), recuperacaoSenha.getFluxoId().toString()),
+                    "codigo=" + excecao.getCodigo()
+                            + ";fluxoId=" + recuperacaoSenha.getFluxoId()
+            );
+        }
+        return new FluxoPublicoException(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                excecao.getCodigo(),
+                excecao.getMensagemPublica()
+        );
+    }
+
+    private Optional<UUID> buscarCadastroPendenteMesmoProjeto(final String emailPrincipal,
+                                                              final Long clienteEcossistemaId) {
+        return cadastroContaRepositorio.findAllByEmailPrincipal(emailPrincipal).stream()
+                .filter(cadastro -> Objects.equals(cadastro.getClienteEcossistemaId(), clienteEcossistemaId))
+                .filter(this::cadastroPendenteMesmoProjeto)
+                .map(CadastroConta::getCadastroId)
+                .findFirst();
+    }
+
+    private boolean cadastroPendenteMesmoProjeto(final CadastroConta cadastroConta) {
+        return !cadastroConta.emailJaConfirmado() || !cadastroConta.etapaTelefoneConcluida();
     }
 
     public void redefinirSenha(final UUID fluxoId, final String senhaPura, final String confirmacaoSenha) {

@@ -6,7 +6,6 @@ import java.io.UncheckedIOException;
 import java.security.cert.TrustAnchor;
 import java.security.cert.X509Certificate;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.Base64;
 import java.util.HashSet;
 import java.util.List;
@@ -145,7 +144,7 @@ public final class ValidadorOficialAppleAppAttest implements ValidadorOficialAte
             throw new IllegalStateException("Validação oficial Apple retornou authenticator data nulo.");
         }
         long contador = authenticatorData.getSignCount();
-        OffsetDateTime agora = OffsetDateTime.now(ZoneOffset.UTC);
+        OffsetDateTime agora = OffsetDateTime.now(java.time.ZoneOffset.UTC);
         Optional<ChaveAppleAppAttest> chaveExistente = chaveRepositorio.findByChaveId(comprovante.chaveId());
         ChaveAppleAppAttest chave = chaveExistente.orElseGet(() -> new ChaveAppleAppAttest(
                 comprovante.chaveId(),
@@ -195,7 +194,7 @@ public final class ValidadorOficialAppleAppAttest implements ValidadorOficialAte
 
         chave.atualizarContadorAssinatura(
                 authenticatorData.getSignCount(),
-                OffsetDateTime.now(ZoneOffset.UTC)
+                OffsetDateTime.now(java.time.ZoneOffset.UTC)
         );
         chaveRepositorio.save(chave);
 

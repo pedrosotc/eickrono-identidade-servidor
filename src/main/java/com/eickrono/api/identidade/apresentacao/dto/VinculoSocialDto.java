@@ -10,5 +10,9 @@ public record VinculoSocialDto(
         boolean suportado,
         boolean vinculado,
         OffsetDateTime vinculadoEm,
-        String identificadorMascarado) {
+        String identificadorMascarado,
+        String nomeExibicaoExterno,
+        String urlAvatarExterno,
+        OffsetDateTime avatarExternoAtualizadoEm,
+        boolean avatarPrincipalNoProjeto) {
 }

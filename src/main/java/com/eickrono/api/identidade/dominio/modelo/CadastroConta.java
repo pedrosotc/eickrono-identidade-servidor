@@ -1,5 +1,6 @@
 package com.eickrono.api.identidade.dominio.modelo;
 
+import com.eickrono.api.identidade.aplicacao.modelo.ContextoSolicitacaoFluxoPublico;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -23,6 +24,9 @@ public class CadastroConta {
 
     @Column(name = "cadastro_id", nullable = false, unique = true)
     private UUID cadastroId;
+
+    @Column(name = "protocolo_suporte", nullable = false, unique = true, length = 40)
+    private String protocoloSuporte;
 
     @Column(name = "subject_remoto", nullable = false, unique = true)
     private String subjectRemoto;
@@ -109,6 +113,33 @@ public class CadastroConta {
     @Column(name = "user_agent_solicitante", length = 512)
     private String userAgentSolicitante;
 
+    @Column(name = "cliente_ecossistema_id")
+    private Long clienteEcossistemaId;
+
+    @Column(name = "locale_solicitante", length = 16)
+    private String localeSolicitante;
+
+    @Column(name = "time_zone_solicitante", length = 64)
+    private String timeZoneSolicitante;
+
+    @Column(name = "tipo_produto_exibicao", length = 32)
+    private String tipoProdutoExibicao;
+
+    @Column(name = "produto_exibicao", length = 128)
+    private String produtoExibicao;
+
+    @Column(name = "canal_exibicao", length = 64)
+    private String canalExibicao;
+
+    @Column(name = "empresa_exibicao", length = 128)
+    private String empresaExibicao;
+
+    @Column(name = "ambiente_exibicao", length = 32)
+    private String ambienteExibicao;
+
+    @Column(name = "exige_validacao_telefone_snapshot", nullable = false)
+    private boolean exigeValidacaoTelefoneSnapshot;
+
     @Column(name = "vinculo_social_pendente_provedor", length = 32)
     private String vinculoSocialPendenteProvedor;
 
@@ -163,7 +194,54 @@ public class CadastroConta {
                          final String userAgentSolicitante,
                          final OffsetDateTime criadoEm,
                          final OffsetDateTime atualizadoEm) {
+        this(
+                cadastroId,
+                subjectRemoto,
+                tipoPessoa,
+                nomeCompleto,
+                nomeFantasia,
+                usuario,
+                sexo,
+                paisNascimento,
+                dataNascimento,
+                emailPrincipal,
+                telefonePrincipal,
+                canalValidacaoTelefone,
+                codigoEmailHash,
+                codigoEmailGeradoEm,
+                codigoEmailExpiraEm,
+                sistemaSolicitante,
+                ipSolicitante,
+                userAgentSolicitante,
+                criadoEm,
+                atualizadoEm,
+                null
+        );
+    }
+
+    public CadastroConta(final UUID cadastroId,
+                         final String subjectRemoto,
+                         final TipoPessoaCadastro tipoPessoa,
+                         final String nomeCompleto,
+                         final String nomeFantasia,
+                         final String usuario,
+                         final SexoPessoaCadastro sexo,
+                         final String paisNascimento,
+                         final LocalDate dataNascimento,
+                         final String emailPrincipal,
+                         final String telefonePrincipal,
+                         final CanalValidacaoTelefoneCadastro canalValidacaoTelefone,
+                         final String codigoEmailHash,
+                         final OffsetDateTime codigoEmailGeradoEm,
+                         final OffsetDateTime codigoEmailExpiraEm,
+                         final String sistemaSolicitante,
+                         final String ipSolicitante,
+                         final String userAgentSolicitante,
+                         final OffsetDateTime criadoEm,
+                         final OffsetDateTime atualizadoEm,
+                         final ContextoSolicitacaoFluxoPublico contextoSolicitacao) {
         this.cadastroId = Objects.requireNonNull(cadastroId, "cadastroId é obrigatório");
+        this.protocoloSuporte = ProtocoloSuporte.gerarCadastro();
         this.subjectRemoto = Objects.requireNonNull(subjectRemoto, "subjectRemoto é obrigatório");
         this.tipoPessoa = Objects.requireNonNull(tipoPessoa, "tipoPessoa é obrigatório");
         this.nomeCompleto = Objects.requireNonNull(nomeCompleto, "nomeCompleto é obrigatório");
@@ -184,6 +262,7 @@ public class CadastroConta {
         this.sistemaSolicitante = Objects.requireNonNull(sistemaSolicitante, "sistemaSolicitante é obrigatório");
         this.ipSolicitante = ipSolicitante;
         this.userAgentSolicitante = userAgentSolicitante;
+        aplicarContextoSolicitacao(contextoSolicitacao);
         this.criadoEm = Objects.requireNonNull(criadoEm, "criadoEm é obrigatório");
         this.atualizadoEm = Objects.requireNonNull(atualizadoEm, "atualizadoEm é obrigatório");
     }
@@ -194,6 +273,10 @@ public class CadastroConta {
 
     public UUID getCadastroId() {
         return cadastroId;
+    }
+
+    public String getProtocoloSuporte() {
+        return protocoloSuporte;
     }
 
     public String getSubjectRemoto() {
@@ -304,6 +387,42 @@ public class CadastroConta {
         return userAgentSolicitante;
     }
 
+    public Long getClienteEcossistemaId() {
+        return clienteEcossistemaId;
+    }
+
+    public String getLocaleSolicitante() {
+        return localeSolicitante;
+    }
+
+    public String getTimeZoneSolicitante() {
+        return timeZoneSolicitante;
+    }
+
+    public String getTipoProdutoExibicao() {
+        return tipoProdutoExibicao;
+    }
+
+    public String getProdutoExibicao() {
+        return produtoExibicao;
+    }
+
+    public String getCanalExibicao() {
+        return canalExibicao;
+    }
+
+    public String getEmpresaExibicao() {
+        return empresaExibicao;
+    }
+
+    public String getAmbienteExibicao() {
+        return ambienteExibicao;
+    }
+
+    public boolean getExigeValidacaoTelefoneSnapshot() {
+        return exigeValidacaoTelefoneSnapshot;
+    }
+
     public String getVinculoSocialPendenteProvedor() {
         return vinculoSocialPendenteProvedor;
     }
@@ -349,11 +468,15 @@ public class CadastroConta {
     }
 
     public boolean possuiTelefoneParaValidacao() {
-        return telefonePrincipal != null && !telefonePrincipal.isBlank();
+        return exigeValidacaoTelefoneSnapshot && telefonePrincipal != null && !telefonePrincipal.isBlank();
     }
 
     public boolean telefoneJaConfirmado() {
-        return !possuiTelefoneParaValidacao() || telefoneConfirmadoEm != null;
+        return telefoneConfirmadoEm != null;
+    }
+
+    public boolean etapaTelefoneConcluida() {
+        return !possuiTelefoneParaValidacao() || telefoneJaConfirmado();
     }
 
     public boolean codigoEmailExpirado(final OffsetDateTime instante) {
@@ -469,5 +592,27 @@ public class CadastroConta {
         this.conviteOrganizacionalEmailConvidado = emailConvidado;
         this.conviteOrganizacionalExigeContaSeparada = exigeContaSeparada;
         this.atualizadoEm = Objects.requireNonNull(atualizadoEm, "atualizadoEm é obrigatório");
+    }
+
+    public void registrarProjetoFluxoPublico(final Long clienteEcossistemaId,
+                                             final boolean exigeValidacaoTelefoneSnapshot,
+                                             final OffsetDateTime atualizadoEm) {
+        this.clienteEcossistemaId = clienteEcossistemaId;
+        this.exigeValidacaoTelefoneSnapshot = exigeValidacaoTelefoneSnapshot;
+        this.atualizadoEm = Objects.requireNonNull(atualizadoEm, "atualizadoEm é obrigatório");
+    }
+
+    private void aplicarContextoSolicitacao(final ContextoSolicitacaoFluxoPublico contextoSolicitacao) {
+        if (contextoSolicitacao == null) {
+            return;
+        }
+        ContextoSolicitacaoFluxoPublico contexto = contextoSolicitacao.sanitizado();
+        this.localeSolicitante = contexto.locale();
+        this.timeZoneSolicitante = contexto.timeZone();
+        this.tipoProdutoExibicao = contexto.tipoProdutoExibicao();
+        this.produtoExibicao = contexto.produtoExibicao();
+        this.canalExibicao = contexto.canalExibicao();
+        this.empresaExibicao = contexto.empresaExibicao();
+        this.ambienteExibicao = contexto.ambienteExibicao();
     }
 }

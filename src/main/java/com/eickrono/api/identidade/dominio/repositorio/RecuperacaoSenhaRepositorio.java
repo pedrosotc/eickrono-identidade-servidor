@@ -8,4 +8,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface RecuperacaoSenhaRepositorio extends JpaRepository<RecuperacaoSenha, Long> {
 
     Optional<RecuperacaoSenha> findByFluxoId(UUID fluxoId);
+
+    Optional<RecuperacaoSenha> findTopByEmailPrincipalOrderByAtualizadoEmDesc(String emailPrincipal);
 }

@@ -15,7 +15,6 @@ import com.eickrono.api.identidade.dominio.modelo.TipoPessoaCadastro;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -40,9 +39,10 @@ class SincronizacaoModeloMultiappServiceTest {
 
     private SincronizacaoModeloMultiappService service;
 
-    @BeforeEach
-    @SuppressWarnings("unused")
-    void setUp() {
+    private SincronizacaoModeloMultiappService service() {
+        if (service != null) {
+            return service;
+        }
         when(jdbcTemplate.update(anyString(), any(MapSqlParameterSource.class))).thenReturn(1);
         when(jdbcTemplate.<java.util.Optional<Long>>query(
                 anyString(),
@@ -50,6 +50,7 @@ class SincronizacaoModeloMultiappServiceTest {
                 org.mockito.ArgumentMatchers.<org.springframework.jdbc.core.ResultSetExtractor<java.util.Optional<Long>>>any()))
                 .thenReturn(java.util.Optional.of(1L));
         service = new SincronizacaoModeloMultiappService(jdbcTemplate);
+        return service;
     }
 
     @Test
@@ -80,7 +81,7 @@ class SincronizacaoModeloMultiappServiceTest {
                 criadoEm);
         cadastro.marcarEmailConfirmado(confirmadoEm);
 
-        service.sincronizarCadastro(cadastro);
+        service().sincronizarCadastro(cadastro);
 
         MapSqlParameterSource params = capturarParametrosFormaAcessoEmail();
         assertThat(params.getValue("verificadoEm")).isEqualTo(confirmadoEm);
@@ -105,7 +106,7 @@ class SincronizacaoModeloMultiappServiceTest {
                 criadoEm.plusHours(12));
         registro.definirStatus(StatusRegistroDispositivo.CONFIRMADO, confirmadoEm);
 
-        service.sincronizarRegistroDispositivo(registro);
+        service().sincronizarRegistroDispositivo(registro);
 
         MapSqlParameterSource params = capturarParametrosFormaAcessoEmail();
         assertThat(params.getValue("verificadoEm")).isNull();

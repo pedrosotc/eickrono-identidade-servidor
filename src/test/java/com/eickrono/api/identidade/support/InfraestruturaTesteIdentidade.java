@@ -9,6 +9,11 @@ import java.security.KeyPairGenerator;
 import java.security.NoSuchAlgorithmException;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -32,11 +37,21 @@ public final class InfraestruturaTesteIdentidade {
     private static final String DEFAULT_POSTGRES_DATABASE = "eickrono_identidade_test";
     private static final String DEFAULT_POSTGRES_USERNAME = "test";
     private static final String DEFAULT_POSTGRES_PASSWORD = "test";
+    private static final String DEFAULT_LOCAL_POSTGRES_HOST = "localhost";
+    private static final String DEFAULT_LOCAL_POSTGRES_PORT = "5432";
+    private static final String DEFAULT_LOCAL_POSTGRES_DATABASE = "eickrono_dev";
+    private static final String DEFAULT_LOCAL_POSTGRES_USERNAME = "eickrono";
+    private static final String DEFAULT_LOCAL_POSTGRES_PASSWORD = "senhaLocalDev";
     private static final String OIDC_REALM_PATH = "/realms/test";
     private static final String METADATA_PATH = OIDC_REALM_PATH + "/.well-known/openid-configuration";
     private static final String JWKS_PATH = OIDC_REALM_PATH + "/protocol/openid-connect/certs";
     private static final String EXPECTED_AUDIENCE = "api-identidade-eickrono";
     private static PostgreSQLContainer<?> postgres;
+    private static String jdbcUrl;
+    private static String jdbcUsername;
+    private static String jdbcPassword;
+    private static String jdbcDriverClassName;
+    private static String postgresSchemaTemporario;
     private static MockWebServer oidcServer;
     private static RSAKey rsaKey;
     private static String issuer;
@@ -49,16 +64,19 @@ public final class InfraestruturaTesteIdentidade {
         public void initialize(@NonNull ConfigurableApplicationContext context) {
             iniciarPostgres();
             iniciarOidc();
-            TestPropertyValues.of(
-                    "spring.datasource.url=" + postgres.getJdbcUrl(),
-                    "spring.datasource.username=" + postgres.getUsername(),
-                    "spring.datasource.password=" + postgres.getPassword(),
-                    "spring.datasource.driver-class-name=" + postgres.getDriverClassName(),
-                    "spring.flyway.enabled=true",
-                    "spring.security.oauth2.resourceserver.jwt.issuer-uri=" + issuer,
-                    "spring.security.oauth2.resourceserver.jwt.jwk-set-uri=" + oidcServer.url(JWKS_PATH),
-                    "fapi.seguranca.audiencia-esperada=" + EXPECTED_AUDIENCE
-            ).applyTo(context.getEnvironment());
+            aplicarPropriedadesOidc(context);
+            List<String> propriedades = new ArrayList<>();
+            propriedades.add("spring.datasource.url=" + jdbcUrl);
+            propriedades.add("spring.datasource.username=" + jdbcUsername);
+            propriedades.add("spring.datasource.password=" + jdbcPassword);
+            propriedades.add("spring.datasource.driver-class-name=" + jdbcDriverClassName);
+            propriedades.add("spring.flyway.enabled=true");
+            if (postgresSchemaTemporario != null) {
+                propriedades.add("spring.jpa.properties.hibernate.default_schema=" + postgresSchemaTemporario);
+                propriedades.add("spring.flyway.default-schema=" + postgresSchemaTemporario);
+                propriedades.add("spring.flyway.schemas=" + postgresSchemaTemporario);
+            }
+            TestPropertyValues.of(propriedades).applyTo(context.getEnvironment());
             context.addApplicationListener(new EncerramentoInfraestruturaListener());
         }
     }
@@ -71,23 +89,44 @@ public final class InfraestruturaTesteIdentidade {
     }
 
     public static void encerrarInfraestrutura() {
+        RuntimeException falha = null;
         try {
             if (oidcServer != null) {
                 oidcServer.shutdown();
                 oidcServer = null;
             }
         } catch (IOException e) {
-            throw new IllegalStateException("Falha ao encerrar MockWebServer do OIDC simulado", e);
+            falha = new IllegalStateException("Falha ao encerrar MockWebServer do OIDC simulado", e);
         } finally {
             if (postgres != null) {
                 try {
                     postgres.close();
                 } catch (Exception e) {
-                    throw new IllegalStateException("Falha ao encerrar container PostgreSQL de testes", e);
+                    RuntimeException erroPostgres = new IllegalStateException(
+                            "Falha ao encerrar container PostgreSQL de testes",
+                            e);
+                    if (falha == null) {
+                        falha = erroPostgres;
+                    } else {
+                        falha.addSuppressed(erroPostgres);
+                    }
                 } finally {
                     postgres = null;
                 }
             }
+            try {
+                encerrarPostgresLocal();
+            } catch (RuntimeException e) {
+                if (falha == null) {
+                    falha = e;
+                } else {
+                    falha.addSuppressed(e);
+                }
+            }
+        }
+
+        if (falha != null) {
+            throw falha;
         }
     }
 
@@ -106,6 +145,16 @@ public final class InfraestruturaTesteIdentidade {
     }
 
     private static void iniciarPostgres() {
+        if (jdbcUrl != null) {
+            return;
+        }
+
+        if (devePreferirPostgresLocal()) {
+            iniciarPostgresLocal(null);
+            return;
+        }
+
+        RuntimeException falhaContainer = null;
         if (postgres == null) {
             PostgreSQLContainer<?> container = new PostgreSQLContainer<>(obterVariavelAmbiente(
                     "EICKRONO_TEST_POSTGRES_IMAGE",
@@ -117,9 +166,30 @@ public final class InfraestruturaTesteIdentidade {
             container.withPassword(obterVariavelAmbiente("POSTGRES_PASSWORD", DEFAULT_POSTGRES_PASSWORD));
             postgres = container;
         }
-        if (!postgres.isRunning()) {
-            postgres.start();
+        try {
+            if (!postgres.isRunning()) {
+                postgres.start();
+            }
+            jdbcUrl = postgres.getJdbcUrl();
+            jdbcUsername = postgres.getUsername();
+            jdbcPassword = postgres.getPassword();
+            jdbcDriverClassName = postgres.getDriverClassName();
+            return;
+        } catch (RuntimeException e) {
+            falhaContainer = e;
+            if (postgres != null) {
+                try {
+                    postgres.close();
+                } catch (Exception ignored) {
+                    // Ignorado porque o erro principal da tentativa com Testcontainers
+                    // sera anexado ao fallback local caso ele tambem falhe.
+                } finally {
+                    postgres = null;
+                }
+            }
         }
+
+        iniciarPostgresLocal(falhaContainer);
     }
 
     private static void iniciarOidc() {
@@ -150,6 +220,14 @@ public final class InfraestruturaTesteIdentidade {
         ));
 
         oidcServer.setDispatcher(oidcDispatcher(metadataJson, jwksJson));
+    }
+
+    private static void aplicarPropriedadesOidc(ConfigurableApplicationContext context) {
+        TestPropertyValues.of(
+                "spring.security.oauth2.resourceserver.jwt.issuer-uri=" + issuer,
+                "spring.security.oauth2.resourceserver.jwt.jwk-set-uri=" + oidcServer.url(JWKS_PATH),
+                "fapi.seguranca.audiencia-esperada=" + EXPECTED_AUDIENCE
+        ).applyTo(context.getEnvironment());
     }
 
     private static RSAKey gerarChaveJwt() {
@@ -202,5 +280,80 @@ public final class InfraestruturaTesteIdentidade {
             return padrao;
         }
         return valor;
+    }
+
+    private static void iniciarPostgresLocal(RuntimeException falhaContainer) {
+        String host = obterVariavelAmbiente("EICKRONO_TEST_POSTGRES_HOST", DEFAULT_LOCAL_POSTGRES_HOST);
+        String port = obterVariavelAmbiente("EICKRONO_TEST_POSTGRES_PORT", DEFAULT_LOCAL_POSTGRES_PORT);
+        String database = obterVariavelAmbiente(
+                "EICKRONO_TEST_POSTGRES_DB_LOCAL",
+                obterVariavelAmbiente("POSTGRES_DB", DEFAULT_LOCAL_POSTGRES_DATABASE));
+        String username = obterVariavelAmbiente(
+                "EICKRONO_TEST_POSTGRES_USER",
+                obterVariavelAmbiente("POSTGRES_USER", DEFAULT_LOCAL_POSTGRES_USERNAME));
+        String password = obterVariavelAmbiente(
+                "EICKRONO_TEST_POSTGRES_PASSWORD",
+                obterVariavelAmbiente("POSTGRES_PASSWORD", DEFAULT_LOCAL_POSTGRES_PASSWORD));
+        String schema = "teste_identidade_" + UUID.randomUUID().toString().replace("-", "");
+        String baseJdbcUrl = "jdbc:postgresql://" + host + ":" + port + "/" + database;
+
+        try (Connection connection = DriverManager.getConnection(baseJdbcUrl, username, password);
+             Statement statement = connection.createStatement()) {
+            statement.execute("create schema if not exists \"" + schema + "\"");
+        } catch (SQLException e) {
+            IllegalStateException falhaLocal = new IllegalStateException(
+                    "Falha ao preparar schema temporario no PostgreSQL local para os testes",
+                    e);
+            if (falhaContainer != null) {
+                falhaLocal.addSuppressed(falhaContainer);
+            }
+            throw falhaLocal;
+        }
+
+        jdbcUrl = baseJdbcUrl + "?currentSchema=" + schema;
+        jdbcUsername = username;
+        jdbcPassword = password;
+        jdbcDriverClassName = "org.postgresql.Driver";
+        postgresSchemaTemporario = schema;
+    }
+
+    private static void encerrarPostgresLocal() {
+        if (postgresSchemaTemporario == null) {
+            jdbcUrl = null;
+            jdbcUsername = null;
+            jdbcPassword = null;
+            jdbcDriverClassName = null;
+            return;
+        }
+
+        String host = obterVariavelAmbiente("EICKRONO_TEST_POSTGRES_HOST", DEFAULT_LOCAL_POSTGRES_HOST);
+        String port = obterVariavelAmbiente("EICKRONO_TEST_POSTGRES_PORT", DEFAULT_LOCAL_POSTGRES_PORT);
+        String database = obterVariavelAmbiente(
+                "EICKRONO_TEST_POSTGRES_DB_LOCAL",
+                obterVariavelAmbiente("POSTGRES_DB", DEFAULT_LOCAL_POSTGRES_DATABASE));
+        String username = obterVariavelAmbiente(
+                "EICKRONO_TEST_POSTGRES_USER",
+                obterVariavelAmbiente("POSTGRES_USER", DEFAULT_LOCAL_POSTGRES_USERNAME));
+        String password = obterVariavelAmbiente(
+                "EICKRONO_TEST_POSTGRES_PASSWORD",
+                obterVariavelAmbiente("POSTGRES_PASSWORD", DEFAULT_LOCAL_POSTGRES_PASSWORD));
+        String baseJdbcUrl = "jdbc:postgresql://" + host + ":" + port + "/" + database;
+
+        try (Connection connection = DriverManager.getConnection(baseJdbcUrl, username, password);
+             Statement statement = connection.createStatement()) {
+            statement.execute("drop schema if exists \"" + postgresSchemaTemporario + "\" cascade");
+        } catch (SQLException e) {
+            throw new IllegalStateException("Falha ao remover schema temporario dos testes de identidade", e);
+        } finally {
+            postgresSchemaTemporario = null;
+            jdbcUrl = null;
+            jdbcUsername = null;
+            jdbcPassword = null;
+            jdbcDriverClassName = null;
+        }
+    }
+
+    private static boolean devePreferirPostgresLocal() {
+        return Boolean.parseBoolean(obterVariavelAmbiente("EICKRONO_TEST_PREFER_LOCAL_POSTGRES", "false"));
     }
 }

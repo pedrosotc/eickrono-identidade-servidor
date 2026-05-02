@@ -6,6 +6,8 @@ public record ConfirmacaoEmailCadastroApiResposta(
         String statusUsuario,
         String emailPrincipal,
         boolean emailConfirmado,
+        boolean telefoneConfirmado,
+        boolean telefoneObrigatorio,
         boolean liberadoParaLogin,
         String proximoPasso
 ) {

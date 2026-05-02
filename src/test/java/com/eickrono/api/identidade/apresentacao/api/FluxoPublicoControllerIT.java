@@ -13,18 +13,25 @@ import com.eickrono.api.identidade.AplicacaoApiIdentidade;
 import com.eickrono.api.identidade.aplicacao.modelo.CadastroInternoRealizado;
 import com.eickrono.api.identidade.aplicacao.modelo.ConfirmacaoEmailCadastroPublicoRealizada;
 import com.eickrono.api.identidade.aplicacao.modelo.ConviteOrganizacionalValidado;
+import com.eickrono.api.identidade.aplicacao.modelo.ContextoSolicitacaoFluxoPublico;
+import com.eickrono.api.identidade.aplicacao.modelo.ProjetoFluxoPublicoResolvido;
 import com.eickrono.api.identidade.aplicacao.servico.AtestacaoAppServico;
 import com.eickrono.api.identidade.aplicacao.servico.AvaliacaoSegurancaAplicativoService;
 import com.eickrono.api.identidade.aplicacao.servico.AutenticacaoSessaoInternaServico;
 import com.eickrono.api.identidade.aplicacao.servico.CadastroContaInternaServico;
 import com.eickrono.api.identidade.aplicacao.servico.ClienteContextoPessoaPerfil;
+import com.eickrono.api.identidade.aplicacao.servico.ContextoSocialPendenteJdbc;
 import com.eickrono.api.identidade.aplicacao.servico.ConviteOrganizacionalService;
 import com.eickrono.api.identidade.aplicacao.servico.RecuperacaoSenhaService;
 import com.eickrono.api.identidade.aplicacao.servico.RegistroDispositivoLoginSilenciosoService;
+import com.eickrono.api.identidade.aplicacao.servico.ResolvedorProjetoFluxoPublicoJdbc;
 import com.eickrono.api.identidade.aplicacao.modelo.DispositivoSessaoRegistrado;
 import com.eickrono.api.identidade.aplicacao.modelo.ContextoPessoaPerfil;
+import com.eickrono.api.identidade.aplicacao.modelo.RecuperacaoSenhaIniciada;
 import com.eickrono.api.identidade.aplicacao.modelo.VinculoSocialPendenteCadastro;
+import com.eickrono.api.identidade.aplicacao.modelo.StatusCadastroPublico;
 import com.eickrono.api.identidade.dominio.modelo.CanalValidacaoTelefoneCadastro;
+import com.eickrono.api.identidade.dominio.modelo.CadastroConta;
 import com.eickrono.api.identidade.dominio.modelo.ProvedorVinculoSocial;
 import com.eickrono.api.identidade.dominio.modelo.TipoPessoaCadastro;
 import com.eickrono.api.identidade.support.InfraestruturaTesteIdentidade;
@@ -83,6 +90,12 @@ class FluxoPublicoControllerIT {
     @MockBean
     private ConviteOrganizacionalService conviteOrganizacionalService;
 
+    @MockBean
+    private ContextoSocialPendenteJdbc contextoSocialPendenteJdbc;
+
+    @MockBean
+    private ResolvedorProjetoFluxoPublicoJdbc resolvedorProjetoFluxoPublico;
+
     @BeforeEach
     void setUp() {
         when(atestacaoAppServico.validarComprovante(org.mockito.ArgumentMatchers.any()))
@@ -110,6 +123,18 @@ class FluxoPublicoControllerIT {
                         "device-token-teste",
                         OffsetDateTime.parse("2026-03-27T20:00:00Z")
                 ));
+        when(resolvedorProjetoFluxoPublico.resolverAtivo("eickrono-thimisu-app"))
+                .thenReturn(new ProjetoFluxoPublicoResolvido(
+                        7L,
+                        "eickrono-thimisu-app",
+                        "Thimisu",
+                        "app",
+                        "Thimisu",
+                        "ios",
+                        false
+                ));
+        when(contextoSocialPendenteJdbc.buscarAtivo(isNull(), eq(7L)))
+                .thenReturn(Optional.empty());
     }
 
     @Test
@@ -133,6 +158,17 @@ class FluxoPublicoControllerIT {
 
         verify(cadastroContaInternaServico).cancelarCadastroPendentePublico(
                 java.util.UUID.fromString("11111111-1111-1111-1111-111111111111"));
+    }
+
+    @Test
+    void deveCancelarContextoSocialPendenteNoProjetoAtual() throws Exception {
+        UUID contextoId = UUID.fromString("77777777-7777-7777-7777-777777777777");
+
+        mockMvc.perform(delete("/api/publica/sessoes/contextos-sociais-pendentes/{contextoId}", contextoId)
+                        .param("aplicacaoId", "eickrono-thimisu-app"))
+                .andExpect(status().isNoContent());
+
+        verify(contextoSocialPendenteJdbc).cancelar(contextoId, 7L, "USUARIO_DESISTIU");
     }
 
     @Test
@@ -242,6 +278,219 @@ class FluxoPublicoControllerIT {
     }
 
     @Test
+    void deveCancelarVinculacaoSocialPendenteQuandoLoginInformadoNaoCorrespondeAContaSugerida() throws Exception {
+        UUID contextoId = UUID.fromString("44444444-4444-4444-4444-444444444444");
+        when(contextoSocialPendenteJdbc.buscarAtivo(contextoId, 7L))
+                .thenReturn(Optional.of(new ContextoSocialPendenteJdbc.ContextoSocialPendenteAtivo(
+                        contextoId,
+                        7L,
+                        UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+                        "usuario.sugerido@eickrono.com",
+                        "ENTRAR_E_VINCULAR",
+                        0,
+                        3
+                )));
+
+        mockMvc.perform(post("/api/publica/sessoes")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "aplicacaoId": "eickrono-thimisu-app",
+                                  "login": "outra.conta@eickrono.com",
+                                  "senha": "SenhaErrada123",
+                                  "contextoSocialPendenteId": "44444444-4444-4444-4444-444444444444",
+                                  "dispositivo": {
+                                    "plataforma": "IOS",
+                                    "identificadorInstalacao": "instalacao-teste",
+                                    "modelo": "simulador",
+                                    "sistemaOperacional": "ios",
+                                    "versaoSistema": "18",
+                                    "versaoApp": "1.0.0"
+                                  },
+                                  "atestacao": {
+                                    "plataforma": "IOS",
+                                    "provedor": "APPLE_APP_ATTEST",
+                                    "tipoComprovante": "OBJETO_ASSERCAO",
+                                    "identificadorDesafio": "desafio",
+                                    "desafioBase64": "ZGVzYWZpbw==",
+                                    "conteudoComprovante": "Y29tcHJvdmFudGU=",
+                                    "geradoEm": "2026-03-26T20:00:00Z",
+                                    "chaveId": "chave"
+                                  },
+                                  "segurancaAplicativo": {
+                                    "plataforma": "IOS",
+                                    "provedorAtestacao": "APPLE_APP_ATTEST",
+                                    "rootOuJailbreak": false,
+                                    "debuggerDetectado": false,
+                                    "hookingSuspeito": false,
+                                    "tamperSuspeito": false,
+                                    "riscoCapturaTela": false,
+                                    "assinaturaValida": true,
+                                    "identidadeAplicativoValida": true,
+                                    "sinaisRisco": [],
+                                    "scoreRiscoLocal": 0,
+                                    "bundleIdentifier": "com.eickrono.thimisu",
+                                    "teamIdentifier": "TEAM123"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.codigo").value("vinculacao_social_pendente_cancelada"))
+                .andExpect(jsonPath("$.detalhes.contextoSocialPendenteId").value(contextoId.toString()))
+                .andExpect(jsonPath("$.detalhes.motivoCancelamento").value("LOGIN_DIVERGENTE"));
+
+        verify(contextoSocialPendenteJdbc).cancelar(contextoId, 7L, "LOGIN_DIVERGENTE");
+    }
+
+    @Test
+    void deveCancelarVinculacaoSocialPendenteNaTerceiraFalhaDeCredenciais() throws Exception {
+        UUID contextoId = UUID.fromString("55555555-5555-5555-5555-555555555555");
+        when(contextoSocialPendenteJdbc.buscarAtivo(contextoId, 7L))
+                .thenReturn(Optional.of(new ContextoSocialPendenteJdbc.ContextoSocialPendenteAtivo(
+                        contextoId,
+                        7L,
+                        UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+                        "usuario.sugerido@eickrono.com",
+                        "ENTRAR_E_VINCULAR",
+                        2,
+                        3
+                )));
+        when(autenticacaoSessaoInternaServico.autenticar("usuario.sugerido@eickrono.com", "SenhaErrada123"))
+                .thenThrow(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid user credentials"));
+        when(contextoSocialPendenteJdbc.registrarFalha(contextoId, 7L))
+                .thenReturn(new ContextoSocialPendenteJdbc.ResultadoTentativaFalha(3, 0, true));
+
+        mockMvc.perform(post("/api/publica/sessoes")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "aplicacaoId": "eickrono-thimisu-app",
+                                  "login": "usuario.sugerido@eickrono.com",
+                                  "senha": "SenhaErrada123",
+                                  "contextoSocialPendenteId": "55555555-5555-5555-5555-555555555555",
+                                  "dispositivo": {
+                                    "plataforma": "IOS",
+                                    "identificadorInstalacao": "instalacao-teste",
+                                    "modelo": "simulador",
+                                    "sistemaOperacional": "ios",
+                                    "versaoSistema": "18",
+                                    "versaoApp": "1.0.0"
+                                  },
+                                  "atestacao": {
+                                    "plataforma": "IOS",
+                                    "provedor": "APPLE_APP_ATTEST",
+                                    "tipoComprovante": "OBJETO_ASSERCAO",
+                                    "identificadorDesafio": "desafio",
+                                    "desafioBase64": "ZGVzYWZpbw==",
+                                    "conteudoComprovante": "Y29tcHJvdmFudGU=",
+                                    "geradoEm": "2026-03-26T20:00:00Z",
+                                    "chaveId": "chave"
+                                  },
+                                  "segurancaAplicativo": {
+                                    "plataforma": "IOS",
+                                    "provedorAtestacao": "APPLE_APP_ATTEST",
+                                    "rootOuJailbreak": false,
+                                    "debuggerDetectado": false,
+                                    "hookingSuspeito": false,
+                                    "tamperSuspeito": false,
+                                    "riscoCapturaTela": false,
+                                    "assinaturaValida": true,
+                                    "identidadeAplicativoValida": true,
+                                    "sinaisRisco": [],
+                                    "scoreRiscoLocal": 0,
+                                    "bundleIdentifier": "com.eickrono.thimisu",
+                                    "teamIdentifier": "TEAM123"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.codigo").value("vinculacao_social_pendente_cancelada"))
+                .andExpect(jsonPath("$.detalhes.contextoSocialPendenteId").value(contextoId.toString()))
+                .andExpect(jsonPath("$.detalhes.motivoCancelamento").value("LIMITE_TENTATIVAS"));
+    }
+
+    @Test
+    void deveOferecerRegularizacaoComNovaSenhaQuandoContaPendenteDoProjetoAtualTiverSenhaInvalida() throws Exception {
+        CadastroConta cadastro = new CadastroConta(
+                UUID.fromString("ffffffff-ffff-ffff-ffff-ffffffffffff"),
+                "sub-ana",
+                TipoPessoaCadastro.FISICA,
+                "Ana Souza",
+                null,
+                "ana.souza",
+                null,
+                null,
+                null,
+                "ana@eickrono.com",
+                "+5511999999999",
+                CanalValidacaoTelefoneCadastro.SMS,
+                "hash",
+                OffsetDateTime.parse("2026-03-25T18:00:00Z"),
+                OffsetDateTime.parse("2026-03-26T03:00:00Z"),
+                "thimisu-backend",
+                "127.0.0.1",
+                "JUnit",
+                OffsetDateTime.parse("2026-03-25T18:00:00Z"),
+                OffsetDateTime.parse("2026-03-25T18:00:00Z")
+        );
+        cadastro.registrarProjetoFluxoPublico(7L, true, OffsetDateTime.parse("2026-03-25T18:00:00Z"));
+        when(autenticacaoSessaoInternaServico.autenticar("ana@eickrono.com", "SenhaErrada123"))
+                .thenThrow(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid user credentials"));
+        when(cadastroContaInternaServico.buscarCadastroPendenteEmailPublicoPorProjeto(
+                "eickrono-thimisu-app",
+                "ana@eickrono.com"
+        )).thenReturn(Optional.of(cadastro));
+
+        mockMvc.perform(post("/api/publica/sessoes")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "aplicacaoId": "eickrono-thimisu-app",
+                                  "login": "ana@eickrono.com",
+                                  "senha": "SenhaErrada123",
+                                  "dispositivo": {
+                                    "plataforma": "IOS",
+                                    "identificadorInstalacao": "instalacao-teste",
+                                    "modelo": "simulador",
+                                    "sistemaOperacional": "ios",
+                                    "versaoSistema": "18",
+                                    "versaoApp": "1.0.0"
+                                  },
+                                  "atestacao": {
+                                    "plataforma": "IOS",
+                                    "provedor": "APPLE_APP_ATTEST",
+                                    "tipoComprovante": "OBJETO_ASSERCAO",
+                                    "identificadorDesafio": "desafio",
+                                    "desafioBase64": "ZGVzYWZpbw==",
+                                    "conteudoComprovante": "Y29tcHJvdmFudGU=",
+                                    "geradoEm": "2026-03-26T20:00:00Z",
+                                    "chaveId": "chave"
+                                  },
+                                  "segurancaAplicativo": {
+                                    "plataforma": "IOS",
+                                    "provedorAtestacao": "APPLE_APP_ATTEST",
+                                    "rootOuJailbreak": false,
+                                    "debuggerDetectado": false,
+                                    "hookingSuspeito": false,
+                                    "tamperSuspeito": false,
+                                    "riscoCapturaTela": false,
+                                    "assinaturaValida": true,
+                                    "identidadeAplicativoValida": true,
+                                    "sinaisRisco": [],
+                                    "scoreRiscoLocal": 0,
+                                    "bundleIdentifier": "com.eickrono.thimisu",
+                                    "teamIdentifier": "TEAM123"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.codigo").value("conta_pendente_redefinir_senha"))
+                .andExpect(jsonPath("$.detalhes.cadastroId").value(cadastro.getCadastroId().toString()))
+                .andExpect(jsonPath("$.detalhes.email").value("ana@eickrono.com"))
+                .andExpect(jsonPath("$.detalhes.requerNovaSenha").value(true));
+    }
+
+    @Test
     void deveAceitarLoginPublicoComUsuarioEAutenticarNoKeycloakComEmailCanonico() throws Exception {
         when(clienteContextoPessoaPerfil.buscarPorUsuario("ana.souza"))
                 .thenReturn(Optional.of(new ContextoPessoaPerfil(
@@ -337,7 +586,9 @@ class FluxoPublicoControllerIT {
                 nullable(ConviteOrganizacionalValidado.class),
                 anyString(),
                 anyString(),
-                nullable(String.class)
+                anyString(),
+                nullable(String.class),
+                nullable(ContextoSolicitacaoFluxoPublico.class)
         );
 
         mockMvc.perform(post("/api/publica/cadastros")
@@ -359,6 +610,13 @@ class FluxoPublicoControllerIT {
                                   "aceitouTermos": true,
                                   "aceitouPrivacidade": true,
                                   "plataformaApp": "IOS",
+                                  "locale": "pt-BR",
+                                  "timeZone": "America/Sao_Paulo",
+                                  "tipoProdutoExibicao": "app",
+                                  "produtoExibicao": "Thimisu",
+                                  "canalExibicao": "ios",
+                                  "empresaExibicao": "Eickrono",
+                                  "ambienteExibicao": "HML",
                                   "vinculoSocialPendente": {
                                     "provedor": "google",
                                     "identificadorExterno": "google-user-123",
@@ -414,9 +672,19 @@ class FluxoPublicoControllerIT {
                         "ana.google"
                 )),
                 isNull(),
-                eq("app-flutter-publico"),
+                eq("eickrono-thimisu-app"),
+                eq("eickrono-thimisu-app"),
                 eq("127.0.0.1"),
-                nullable(String.class)
+                nullable(String.class),
+                eq(new ContextoSolicitacaoFluxoPublico(
+                        "pt-BR",
+                        "America/Sao_Paulo",
+                        "app",
+                        "Thimisu",
+                        "ios",
+                        "Eickrono",
+                        "HML"
+                ))
         );
     }
 
@@ -454,7 +722,9 @@ class FluxoPublicoControllerIT {
                 any(ConviteOrganizacionalValidado.class),
                 anyString(),
                 anyString(),
-                nullable(String.class)
+                anyString(),
+                nullable(String.class),
+                nullable(ContextoSolicitacaoFluxoPublico.class)
         );
 
         mockMvc.perform(post("/api/publica/convites/{codigo}/cadastros", "ORG-ACME-2026")
@@ -476,6 +746,13 @@ class FluxoPublicoControllerIT {
                                   "aceitouTermos": true,
                                   "aceitouPrivacidade": true,
                                   "plataformaApp": "IOS",
+                                  "locale": "pt-BR",
+                                  "timeZone": "America/Sao_Paulo",
+                                  "tipoProdutoExibicao": "app",
+                                  "produtoExibicao": "Thimisu",
+                                  "canalExibicao": "ios",
+                                  "empresaExibicao": "Eickrono",
+                                  "ambienteExibicao": "HML",
                                   "atestacao": {
                                     "plataforma": "IOS",
                                     "provedor": "APPLE_APP_ATTEST",
@@ -523,9 +800,19 @@ class FluxoPublicoControllerIT {
                 eq("SenhaForte@123"),
                 isNull(),
                 eq(convite),
-                eq("app-flutter-publico"),
+                eq("eickrono-thimisu-app"),
+                eq("eickrono-thimisu-app"),
                 eq("127.0.0.1"),
-                nullable(String.class)
+                nullable(String.class),
+                eq(new ContextoSolicitacaoFluxoPublico(
+                        "pt-BR",
+                        "America/Sao_Paulo",
+                        "app",
+                        "Thimisu",
+                        "ios",
+                        "Eickrono",
+                        "HML"
+                ))
         );
     }
 
@@ -563,7 +850,9 @@ class FluxoPublicoControllerIT {
                 any(ConviteOrganizacionalValidado.class),
                 anyString(),
                 anyString(),
-                nullable(String.class)
+                anyString(),
+                nullable(String.class),
+                nullable(ContextoSolicitacaoFluxoPublico.class)
         );
 
         mockMvc.perform(post("/api/publica/convites/{codigo}/cadastros", "ORG-ACME-2026")
@@ -585,6 +874,13 @@ class FluxoPublicoControllerIT {
                                   "aceitouTermos": true,
                                   "aceitouPrivacidade": true,
                                   "plataformaApp": "IOS",
+                                  "locale": "pt-BR",
+                                  "timeZone": "America/Sao_Paulo",
+                                  "tipoProdutoExibicao": "app",
+                                  "produtoExibicao": "Thimisu",
+                                  "canalExibicao": "ios",
+                                  "empresaExibicao": "Eickrono",
+                                  "ambienteExibicao": "HML",
                                   "atestacao": {
                                     "plataforma": "IOS",
                                     "provedor": "APPLE_APP_ATTEST",
@@ -630,10 +926,115 @@ class FluxoPublicoControllerIT {
                 eq("SenhaForte@123"),
                 isNull(),
                 eq(convite),
-                eq("app-flutter-publico"),
+                eq("eickrono-thimisu-app"),
+                eq("eickrono-thimisu-app"),
                 eq("127.0.0.1"),
-                nullable(String.class)
+                nullable(String.class),
+                eq(new ContextoSolicitacaoFluxoPublico(
+                        "pt-BR",
+                        "America/Sao_Paulo",
+                        "app",
+                        "Thimisu",
+                        "ios",
+                        "Eickrono",
+                        "HML"
+                ))
         );
+    }
+
+    @Test
+    void deveIniciarRecuperacaoSenhaComContextoDeLocaleEFuso() throws Exception {
+        when(recuperacaoSenhaService.iniciar(
+                eq("eickrono-thimisu-app"),
+                eq("ana@eickrono.com"),
+                eq(new ContextoSolicitacaoFluxoPublico(
+                        "es-AR",
+                        "America/Argentina/Buenos_Aires",
+                        "app",
+                        "Thimisu",
+                        "ios",
+                        "Eickrono",
+                        "HML"
+                ))
+        )).thenReturn(RecuperacaoSenhaIniciada.validarCodigoRecuperacao(
+                UUID.fromString("cccccccc-cccc-cccc-cccc-cccccccccccc")
+        ));
+
+        mockMvc.perform(post("/api/publica/recuperacoes-senha")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "aplicacaoId": "eickrono-thimisu-app",
+                                  "emailPrincipal": "ana@eickrono.com",
+                                  "locale": "es-AR",
+                                  "timeZone": "America/Argentina/Buenos_Aires",
+                                  "tipoProdutoExibicao": "app",
+                                  "produtoExibicao": "Thimisu",
+                                  "canalExibicao": "ios",
+                                  "empresaExibicao": "Eickrono",
+                                  "ambienteExibicao": "HML"
+                                }
+                                """))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.fluxoId").value("cccccccc-cccc-cccc-cccc-cccccccccccc"))
+                .andExpect(jsonPath("$.cadastroId").doesNotExist())
+                .andExpect(jsonPath("$.proximoPasso").value("VALIDAR_CODIGO_RECUPERACAO"))
+                .andExpect(jsonPath("$.requerNovaSenha").value(true));
+
+        verify(recuperacaoSenhaService).iniciar(
+                "eickrono-thimisu-app",
+                "ana@eickrono.com",
+                new ContextoSolicitacaoFluxoPublico(
+                        "es-AR",
+                        "America/Argentina/Buenos_Aires",
+                        "app",
+                        "Thimisu",
+                        "ios",
+                        "Eickrono",
+                        "HML"
+                )
+        );
+    }
+
+    @Test
+    void deveIniciarRecuperacaoSenhaComValidacaoDeContatosQuandoContaEstiverPendenteNoProjetoAtual() throws Exception {
+        when(recuperacaoSenhaService.iniciar(
+                eq("eickrono-thimisu-app"),
+                eq("ana@eickrono.com"),
+                eq(new ContextoSolicitacaoFluxoPublico(
+                        "pt-BR",
+                        "America/Sao_Paulo",
+                        "app",
+                        "Thimisu",
+                        "ios",
+                        "Eickrono",
+                        "HML"
+                ))
+        )).thenReturn(RecuperacaoSenhaIniciada.validarContatosCadastro(
+                UUID.fromString("dddddddd-dddd-dddd-dddd-dddddddddddd"),
+                false
+        ));
+
+        mockMvc.perform(post("/api/publica/recuperacoes-senha")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "aplicacaoId": "eickrono-thimisu-app",
+                                  "emailPrincipal": "ana@eickrono.com",
+                                  "locale": "pt-BR",
+                                  "timeZone": "America/Sao_Paulo",
+                                  "tipoProdutoExibicao": "app",
+                                  "produtoExibicao": "Thimisu",
+                                  "canalExibicao": "ios",
+                                  "empresaExibicao": "Eickrono",
+                                  "ambienteExibicao": "HML"
+                                }
+                                """))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.fluxoId").doesNotExist())
+                .andExpect(jsonPath("$.cadastroId").value("dddddddd-dddd-dddd-dddd-dddddddddddd"))
+                .andExpect(jsonPath("$.proximoPasso").value("VALIDAR_CONTATOS"))
+                .andExpect(jsonPath("$.requerNovaSenha").value(false));
     }
 
     @Test
@@ -715,7 +1116,11 @@ class FluxoPublicoControllerIT {
                 "usuario-001",
                 "LIBERADO",
                 true,
+                true,
+                true,
                 true
+                ,
+                "LOGIN"
         ));
 
         mockMvc.perform(post("/api/publica/cadastros/{cadastroId}/confirmacoes/email", cadastroId)
@@ -729,8 +1134,89 @@ class FluxoPublicoControllerIT {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.cadastroId").value(cadastroId.toString()))
                 .andExpect(jsonPath("$.emailConfirmado").value(true))
+                .andExpect(jsonPath("$.telefoneConfirmado").value(true))
+                .andExpect(jsonPath("$.telefoneObrigatorio").value(true))
                 .andExpect(jsonPath("$.liberadoParaLogin").value(true))
                 .andExpect(jsonPath("$.proximoPasso").value("LOGIN"));
+    }
+
+    @Test
+    void deveConfirmarTelefoneDoCadastroPublicoNaRotaDedicada() throws Exception {
+        UUID cadastroId = UUID.fromString("dddddddd-dddd-dddd-dddd-dddddddddddd");
+        when(cadastroContaInternaServico.confirmarTelefonePublico(
+                eq(cadastroId),
+                eq("654321")
+        )).thenReturn(new ConfirmacaoEmailCadastroPublicoRealizada(
+                cadastroId,
+                "sub-ana",
+                "ana@eickrono.com",
+                "usuario-001",
+                "LIBERADO",
+                true,
+                true,
+                true,
+                true,
+                "LOGIN"
+        ));
+
+        mockMvc.perform(post("/api/publica/cadastros/{cadastroId}/confirmacoes/telefone", cadastroId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "codigo": "654321"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.cadastroId").value(cadastroId.toString()))
+                .andExpect(jsonPath("$.telefoneConfirmado").value(true))
+                .andExpect(jsonPath("$.liberadoParaLogin").value(true))
+                .andExpect(jsonPath("$.proximoPasso").value("LOGIN"));
+    }
+
+    @Test
+    void deveDefinirSenhaDoCadastroPendenteNaRotaPublica() throws Exception {
+        UUID cadastroId = UUID.fromString("12121212-1212-1212-1212-121212121212");
+
+        mockMvc.perform(post("/api/publica/cadastros/{cadastroId}/senha", cadastroId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "senha": "SenhaNova@123",
+                                  "confirmacaoSenha": "SenhaNova@123"
+                                }
+                                """))
+                .andExpect(status().isNoContent());
+
+        verify(cadastroContaInternaServico).definirSenhaCadastroPendentePublico(
+                cadastroId,
+                "SenhaNova@123",
+                "SenhaNova@123"
+        );
+    }
+
+    @Test
+    void deveConsultarStatusDoCadastroPublicoPendente() throws Exception {
+        UUID cadastroId = UUID.fromString("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee");
+        when(cadastroContaInternaServico.consultarStatusCadastroPublico(cadastroId))
+                .thenReturn(new StatusCadastroPublico(
+                        cadastroId,
+                        "ana@eickrono.com",
+                        "+5511999999999",
+                        true,
+                        false,
+                        true,
+                        false,
+                        "VALIDAR_TELEFONE"
+                ));
+
+        mockMvc.perform(get("/api/publica/cadastros/{cadastroId}/status", cadastroId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.cadastroId").value(cadastroId.toString()))
+                .andExpect(jsonPath("$.emailConfirmado").value(true))
+                .andExpect(jsonPath("$.telefoneConfirmado").value(false))
+                .andExpect(jsonPath("$.telefoneObrigatorio").value(true))
+                .andExpect(jsonPath("$.liberadoParaLogin").value(false))
+                .andExpect(jsonPath("$.proximoPasso").value("VALIDAR_TELEFONE"));
     }
 
     @Test

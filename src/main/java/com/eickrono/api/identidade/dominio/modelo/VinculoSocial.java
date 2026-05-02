@@ -36,14 +36,36 @@ public class VinculoSocial {
     @Column(name = "vinculado_em", nullable = false)
     private OffsetDateTime vinculadoEm;
 
+    @Column(name = "nome_exibicao_externo")
+    private String nomeExibicaoExterno;
+
+    @Column(name = "url_avatar_externo", length = 2048)
+    private String urlAvatarExterno;
+
+    @Column(name = "avatar_externo_atualizado_em")
+    private OffsetDateTime avatarExternoAtualizadoEm;
+
     protected VinculoSocial() {
     }
 
     public VinculoSocial(PerfilIdentidade perfil, String provedor, String identificador, OffsetDateTime vinculadoEm) {
+        this(perfil, provedor, identificador, vinculadoEm, null, null, null);
+    }
+
+    public VinculoSocial(PerfilIdentidade perfil,
+                         String provedor,
+                         String identificador,
+                         OffsetDateTime vinculadoEm,
+                         String nomeExibicaoExterno,
+                         String urlAvatarExterno,
+                         OffsetDateTime avatarExternoAtualizadoEm) {
         this.perfil = perfil;
         this.provedor = provedor;
         this.identificador = identificador;
         this.vinculadoEm = vinculadoEm;
+        this.nomeExibicaoExterno = nomeExibicaoExterno;
+        this.urlAvatarExterno = urlAvatarExterno;
+        this.avatarExternoAtualizadoEm = avatarExternoAtualizadoEm;
     }
 
     public Long getId() {
@@ -66,7 +88,32 @@ public class VinculoSocial {
         return vinculadoEm;
     }
 
+    public String getNomeExibicaoExterno() {
+        return nomeExibicaoExterno;
+    }
+
+    public String getUrlAvatarExterno() {
+        return urlAvatarExterno;
+    }
+
+    public OffsetDateTime getAvatarExternoAtualizadoEm() {
+        return avatarExternoAtualizadoEm;
+    }
+
     public void atualizarIdentificador(final String novoIdentificador) {
         this.identificador = Objects.requireNonNull(novoIdentificador, "identificador é obrigatório");
+    }
+
+    public void atualizarDadosExternos(final String nomeExibicaoExterno,
+                                       final String urlAvatarExterno,
+                                       final OffsetDateTime atualizadoEm) {
+        if (nomeExibicaoExterno != null && !nomeExibicaoExterno.isBlank()) {
+            this.nomeExibicaoExterno = nomeExibicaoExterno.trim();
+        }
+        if (urlAvatarExterno != null && !urlAvatarExterno.isBlank()) {
+            this.urlAvatarExterno = urlAvatarExterno.trim();
+            this.avatarExternoAtualizadoEm = Objects.requireNonNull(
+                    atualizadoEm, "atualizadoEm é obrigatório");
+        }
     }
 }

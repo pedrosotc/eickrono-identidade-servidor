@@ -208,7 +208,7 @@ public class ClienteAdministracaoCadastroKeycloakHttp
             return;
         }
         if (!response.getStatusCode().is2xxSuccessful()) {
-            throw erroGenerico("Não foi possível vincular a identidade federada ao usuário pendente.");
+            throw erroGenerico("Não foi possível vincular a identidade federada ao usuário.");
         }
     }
 

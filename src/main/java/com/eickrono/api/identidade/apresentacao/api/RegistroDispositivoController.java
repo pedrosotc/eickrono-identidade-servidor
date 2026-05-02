@@ -1,11 +1,15 @@
 package com.eickrono.api.identidade.apresentacao.api;
 
 import com.eickrono.api.identidade.aplicacao.excecao.ApiAutenticadaException;
+import com.eickrono.api.identidade.aplicacao.modelo.ContaLocalProjetoPorEmailResolvida;
 import com.eickrono.api.identidade.aplicacao.modelo.ContextoPessoaPerfil;
 import com.eickrono.api.identidade.aplicacao.modelo.IdentidadeFederadaKeycloak;
 import com.eickrono.api.identidade.aplicacao.modelo.DispositivoSessaoRegistrado;
+import com.eickrono.api.identidade.aplicacao.modelo.ProjetoFluxoPublicoResolvido;
 import com.eickrono.api.identidade.aplicacao.servico.ClienteContextoPessoaPerfil;
 import com.eickrono.api.identidade.aplicacao.servico.ClienteAdministracaoVinculosSociaisKeycloak;
+import com.eickrono.api.identidade.aplicacao.servico.ContextoSocialPendenteJdbc;
+import com.eickrono.api.identidade.aplicacao.servico.LocalizadorContaLocalProjetoPorEmailJdbc;
 import com.eickrono.api.identidade.apresentacao.dto.ConfirmacaoRegistroRequest;
 import com.eickrono.api.identidade.apresentacao.dto.ConfirmacaoRegistroResponse;
 import com.eickrono.api.identidade.apresentacao.dto.PoliticaOfflineDispositivoResponse;
@@ -24,6 +28,7 @@ import com.eickrono.api.identidade.dominio.repositorio.CadastroContaRepositorio;
 import com.eickrono.api.identidade.dominio.repositorio.FormaAcessoRepositorio;
 import com.eickrono.api.identidade.dominio.repositorio.PessoaRepositorio;
 import com.eickrono.api.identidade.aplicacao.servico.OfflineDispositivoService;
+import com.eickrono.api.identidade.aplicacao.servico.ResolvedorProjetoFluxoPublico;
 import com.eickrono.api.identidade.aplicacao.servico.RegistroDispositivoLoginSilenciosoService;
 import com.eickrono.api.identidade.aplicacao.servico.RegistroDispositivoService;
 import jakarta.validation.Valid;
@@ -52,12 +57,14 @@ import org.springframework.web.bind.annotation.RestController;
 public class RegistroDispositivoController {
     private static final String STATUS_LIBERADO = "LIBERADO";
     private static final String STATUS_ATIVO = "ATIVO";
-
     private final RegistroDispositivoService registroDispositivoService;
     private final OfflineDispositivoService offlineDispositivoService;
     private final RegistroDispositivoLoginSilenciosoService registroDispositivoLoginSilenciosoService;
     private final ClienteContextoPessoaPerfil clienteContextoPessoaPerfil;
     private final ClienteAdministracaoVinculosSociaisKeycloak clienteAdministracaoVinculosSociaisKeycloak;
+    private final ContextoSocialPendenteJdbc contextoSocialPendenteJdbc;
+    private final ResolvedorProjetoFluxoPublico resolvedorProjetoFluxoPublico;
+    private final LocalizadorContaLocalProjetoPorEmailJdbc localizadorContaLocalProjetoPorEmail;
     private final FormaAcessoRepositorio formaAcessoRepositorio;
     private final CadastroContaRepositorio cadastroContaRepositorio;
     private final PessoaRepositorio pessoaRepositorio;
@@ -67,6 +74,9 @@ public class RegistroDispositivoController {
                                          RegistroDispositivoLoginSilenciosoService registroDispositivoLoginSilenciosoService,
                                          ClienteContextoPessoaPerfil clienteContextoPessoaPerfil,
                                          ClienteAdministracaoVinculosSociaisKeycloak clienteAdministracaoVinculosSociaisKeycloak,
+                                         ContextoSocialPendenteJdbc contextoSocialPendenteJdbc,
+                                         ResolvedorProjetoFluxoPublico resolvedorProjetoFluxoPublico,
+                                         LocalizadorContaLocalProjetoPorEmailJdbc localizadorContaLocalProjetoPorEmail,
                                          FormaAcessoRepositorio formaAcessoRepositorio,
                                          CadastroContaRepositorio cadastroContaRepositorio,
                                          PessoaRepositorio pessoaRepositorio) {
@@ -75,6 +85,9 @@ public class RegistroDispositivoController {
         this.registroDispositivoLoginSilenciosoService = registroDispositivoLoginSilenciosoService;
         this.clienteContextoPessoaPerfil = clienteContextoPessoaPerfil;
         this.clienteAdministracaoVinculosSociaisKeycloak = clienteAdministracaoVinculosSociaisKeycloak;
+        this.contextoSocialPendenteJdbc = contextoSocialPendenteJdbc;
+        this.resolvedorProjetoFluxoPublico = resolvedorProjetoFluxoPublico;
+        this.localizadorContaLocalProjetoPorEmail = localizadorContaLocalProjetoPorEmail;
         this.formaAcessoRepositorio = formaAcessoRepositorio;
         this.cadastroContaRepositorio = cadastroContaRepositorio;
         this.pessoaRepositorio = pessoaRepositorio;
@@ -99,8 +112,8 @@ public class RegistroDispositivoController {
         ContextoPessoaPerfil contexto = resolverContextoSessaoSocial(usuarioSub)
                 .orElseThrow(() -> ApiAutenticadaException.conflito(
                         "social_sem_conta_local",
-                        "Para entrar com esta rede social, primeiro associe esta rede à sua conta.",
-                        montarDetalhesSocialSemContaLocal(usuarioSub)
+                        resolverMensagemSocialSemContaLocal(jwt, request),
+                        montarDetalhesSocialSemContaLocal(usuarioSub, jwt, request)
                 ));
         validarContaLiberadaParaSessaoSocial(contexto, usuarioSub);
         DispositivoSessaoRegistrado resposta = registroDispositivoLoginSilenciosoService.registrar(contexto, request);
@@ -171,26 +184,122 @@ public class RegistroDispositivoController {
         }
     }
 
-    private Map<String, Object> montarDetalhesSocialSemContaLocal(final String usuarioSub) {
+    private Map<String, Object> montarDetalhesSocialSemContaLocal(final String usuarioSub,
+                                                                  final Jwt jwt,
+                                                                  final com.eickrono.api.identidade.apresentacao.dto.fluxo.DispositivoSessaoApiRequest request) {
+        ProjetoFluxoPublicoResolvido projeto = resolvedorProjetoFluxoPublico.resolverAtivo(request.aplicacaoId());
+        Optional<ContaLocalProjetoPorEmailResolvida> contaLocalProjetoAtual =
+                localizarContaLocalNoProjetoAtual(projeto, extrairEmail(jwt));
         Map<String, Object> detalhes = new LinkedHashMap<>();
         detalhes.put("sub", usuarioSub);
-        detalhes.put("acaoSugerida", "VINCULAR_OU_CADASTRAR");
+        detalhes.put("acaoSugerida", "ABRIR_CADASTRO");
+        Optional<String> emailSocial = extrairEmail(jwt);
+        emailSocial.ifPresent(email -> detalhes.put("email", email));
+        contaLocalProjetoAtual.ifPresent(contaLocal -> {
+            detalhes.put("acaoSugerida", "ENTRAR_E_VINCULAR");
+            detalhes.put("loginSugerido", contaLocal.loginSugerido());
+            detalhes.put("emailContaExistente", contaLocal.emailNormalizado());
+        });
 
+        final String[] provedorSocial = new String[1];
+        final String[] identificadorExterno = new String[1];
+        final String[] nomeUsuarioExterno = new String[1];
+        final String[] nomeExibicaoExterno = new String[1];
+        final String[] urlAvatarExterno = new String[1];
         try {
             listarIdentidadesFederadasSeguras(usuarioSub).stream()
                     .findFirst()
                     .ifPresent(identidade -> {
+                        provedorSocial[0] = identidade.provedor().getAliasApi();
+                        identificadorExterno[0] = identidade.identificadorExterno();
+                        nomeUsuarioExterno[0] = identidade.nomeUsuarioExterno();
+                        nomeExibicaoExterno[0] = normalizarTexto(
+                                identidade.nomeExibicaoExterno(),
+                                jwt.getClaimAsString("name")
+                        );
+                        urlAvatarExterno[0] = normalizarTexto(
+                                identidade.urlAvatarExterno(),
+                                jwt.getClaimAsString("picture"),
+                                jwt.getClaimAsString("avatar_url"),
+                                jwt.getClaimAsString("avatar")
+                        );
                         detalhes.put("provedor", identidade.provedor().getAliasApi());
                         detalhes.put("identificadorExterno", identidade.identificadorExterno());
                         if (StringUtils.hasText(identidade.nomeUsuarioExterno())) {
                             detalhes.put("nomeUsuarioExterno", identidade.nomeUsuarioExterno());
                         }
+                        if (StringUtils.hasText(nomeExibicaoExterno[0])) {
+                            detalhes.put("nomeExibicaoExterno", nomeExibicaoExterno[0]);
+                        }
+                        if (StringUtils.hasText(urlAvatarExterno[0])) {
+                            detalhes.put("urlAvatarExterno", urlAvatarExterno[0]);
+                        }
                     });
         } catch (RuntimeException ignored) {
             // Mantém o contrato mínimo do erro mesmo quando a consulta administrativa falhar.
         }
+        if (StringUtils.hasText(provedorSocial[0]) && StringUtils.hasText(identificadorExterno[0])) {
+            UUID contextoSocialPendenteId = contextoSocialPendenteJdbc.registrarOuAtualizar(
+                    projeto,
+                    provedorSocial[0],
+                    identificadorExterno[0],
+                    emailSocial.orElse(null),
+                    nomeUsuarioExterno[0],
+                    nomeExibicaoExterno[0],
+                    urlAvatarExterno[0],
+                    contaLocalProjetoAtual.map(ContaLocalProjetoPorEmailResolvida::usuarioId).orElse(null),
+                    contaLocalProjetoAtual.map(ContaLocalProjetoPorEmailResolvida::loginSugerido).orElse(null)
+            );
+            detalhes.put("contextoSocialPendenteId", contextoSocialPendenteId);
+        }
 
         return detalhes;
+    }
+
+    private String resolverMensagemSocialSemContaLocal(final Jwt jwt,
+                                                       final com.eickrono.api.identidade.apresentacao.dto.fluxo.DispositivoSessaoApiRequest request) {
+        return resolverContaLocalNoProjetoAtual(request.aplicacaoId(), extrairEmail(jwt))
+                .map(conta -> "Ja existe uma conta neste projeto com o mesmo e-mail desta rede social. Deseja entrar e vincular agora?")
+                .orElse("Esta rede social foi autenticada com sucesso, mas ainda nao esta ligada a uma conta local. Deseja abrir o cadastro com os dados recebidos?");
+    }
+
+    private Optional<String> extrairEmail(final Jwt jwt) {
+        return Optional.ofNullable(jwt)
+                .map(token -> token.getClaimAsString("email"))
+                .map(String::trim)
+                .filter(valor -> !valor.isEmpty())
+                .map(valor -> valor.toLowerCase(Locale.ROOT));
+    }
+
+    private String normalizarTexto(final String... valores) {
+        for (String valor : valores) {
+            if (StringUtils.hasText(valor)) {
+                return valor.trim();
+            }
+        }
+        return null;
+    }
+
+    private Optional<ContaLocalProjetoPorEmailResolvida> resolverContaLocalNoProjetoAtual(final String aplicacaoId,
+                                                                                           final Optional<String> emailSocial) {
+        if (!StringUtils.hasText(aplicacaoId) || emailSocial.isEmpty()) {
+            return Optional.empty();
+        }
+        try {
+            ProjetoFluxoPublicoResolvido projeto = resolvedorProjetoFluxoPublico.resolverAtivo(aplicacaoId);
+            return localizarContaLocalNoProjetoAtual(projeto, emailSocial);
+        } catch (RuntimeException ignored) {
+            return Optional.empty();
+        }
+    }
+
+    private Optional<ContaLocalProjetoPorEmailResolvida> localizarContaLocalNoProjetoAtual(
+            final ProjetoFluxoPublicoResolvido projeto,
+            final Optional<String> emailSocial) {
+        if (projeto == null || emailSocial.isEmpty()) {
+            return Optional.empty();
+        }
+        return localizadorContaLocalProjetoPorEmail.localizar(projeto.clienteEcossistemaId(), emailSocial.get());
     }
 
     private Optional<ContextoPessoaPerfil> resolverContextoSessaoSocial(final String usuarioSub) {
@@ -236,7 +345,23 @@ public class RegistroDispositivoController {
                             statusUsuario,
                             cadastroConta,
                             false,
-                            "EMAIL_NAO_CONFIRMADO")
+                            "EMAIL_NAO_CONFIRMADO",
+                            null)
+            );
+        }
+        if (statusIndicaContaDesabilitada(statusUsuario)) {
+            throw new ApiAutenticadaException(
+                    HttpStatus.FORBIDDEN,
+                    "conta_desabilitada",
+                    "A conta está desabilitada para autenticação.",
+                    montarDetalhesContaNaoLiberadaSocial(
+                            contexto,
+                            usuarioSub,
+                            statusUsuario,
+                            resolverCadastroContaSessaoSocial(contexto, usuarioSub),
+                            null,
+                            "STATUS_DESABILITADO",
+                            "SUPORTE")
             );
         }
         throw new ApiAutenticadaException(
@@ -249,6 +374,7 @@ public class RegistroDispositivoController {
                         statusUsuario,
                         resolverCadastroContaSessaoSocial(contexto, usuarioSub),
                         null,
+                        null,
                         null)
         );
     }
@@ -258,7 +384,8 @@ public class RegistroDispositivoController {
                                                                      final String statusUsuario,
                                                                      final Optional<CadastroConta> cadastroConta,
                                                                      final Boolean emailVerificado,
-                                                                     final String motivoBloqueio) {
+                                                                     final String motivoBloqueio,
+                                                                     final String acaoSugerida) {
         Map<String, Object> detalhes = new LinkedHashMap<>();
         detalhes.put("sub", usuarioSub);
         detalhes.put("statusUsuario", statusUsuario);
@@ -271,10 +398,22 @@ public class RegistroDispositivoController {
         if (StringUtils.hasText(motivoBloqueio)) {
             detalhes.put("motivoBloqueio", motivoBloqueio);
         }
+        if (StringUtils.hasText(acaoSugerida)) {
+            detalhes.put("acaoSugerida", acaoSugerida);
+        }
         cadastroConta
                 .map(cadastro -> cadastro.getCadastroId().toString())
                 .ifPresent(cadastroId -> detalhes.put("cadastroId", cadastroId));
         return detalhes;
+    }
+
+    private boolean statusIndicaContaDesabilitada(final String statusUsuario) {
+        String normalizado = statusUsuario.trim().toUpperCase(Locale.ROOT);
+        return normalizado.equals("DESABILITADO")
+                || normalizado.equals("DESATIVADO")
+                || normalizado.equals("INATIVO")
+                || normalizado.equals("BLOQUEADO")
+                || normalizado.equals("SUSPENSO");
     }
 
     private Optional<CadastroConta> resolverCadastroContaSessaoSocial(final ContextoPessoaPerfil contexto,

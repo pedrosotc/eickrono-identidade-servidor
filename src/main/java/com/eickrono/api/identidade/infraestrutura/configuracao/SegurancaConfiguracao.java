@@ -62,10 +62,16 @@ public class SegurancaConfiguracao {
     private static final AntPathRequestMatcher ACTUATOR_HEALTH_MATCHER = AntPathRequestMatcher.antMatcher("/actuator/health");
     private static final AntPathRequestMatcher ACTUATOR_INFO_MATCHER = AntPathRequestMatcher.antMatcher("/actuator/info");
     private static final AntPathRequestMatcher ERROR_MATCHER = AntPathRequestMatcher.antMatcher("/error");
+    private static final AntPathRequestMatcher ESTADO_API_MATCHER =
+            AntPathRequestMatcher.antMatcher(HttpMethod.GET, "/api/v1/estado");
     private static final AntPathRequestMatcher JWKS_PUBLICAS_MATCHER =
             AntPathRequestMatcher.antMatcher(HttpMethod.GET, "/.well-known/chaves-publicas");
     private static final AntPathRequestMatcher REGISTRO_DISPOSITIVO_MATCHER =
-            AntPathRequestMatcher.antMatcher("/identidade/dispositivos/registro/**");
+            AntPathRequestMatcher.antMatcher(HttpMethod.POST, "/identidade/dispositivos/registro");
+    private static final AntPathRequestMatcher CONFIRMACAO_REGISTRO_DISPOSITIVO_MATCHER =
+            AntPathRequestMatcher.antMatcher(HttpMethod.POST, "/identidade/dispositivos/registro/*/confirmacao");
+    private static final AntPathRequestMatcher REENVIO_REGISTRO_DISPOSITIVO_MATCHER =
+            AntPathRequestMatcher.antMatcher(HttpMethod.POST, "/identidade/dispositivos/registro/*/reenviar");
 
     @Bean
     @Order(0)
@@ -98,19 +104,29 @@ public class SegurancaConfiguracao {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(ACTUATOR_HEALTH_MATCHER, ACTUATOR_INFO_MATCHER).permitAll()
                         .requestMatchers(ERROR_MATCHER).permitAll()
+                        .requestMatchers(ESTADO_API_MATCHER).permitAll()
                         .requestMatchers(JWKS_PUBLICAS_MATCHER).permitAll()
-                        .requestMatchers(REGISTRO_DISPOSITIVO_MATCHER).permitAll()
+                        .requestMatchers(
+                                REGISTRO_DISPOSITIVO_MATCHER,
+                                CONFIRMACAO_REGISTRO_DISPOSITIVO_MATCHER,
+                                REENVIO_REGISTRO_DISPOSITIVO_MATCHER
+                        ).permitAll()
                         .requestMatchers("/api/publica/atestacoes/**").permitAll()
                         .requestMatchers("/api/publica/cadastros/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/publica/convites/*").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/publica/convites/*/cadastros").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/publica/sessoes").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/publica/sessoes/sociais").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/publica/sessoes/refresh").permitAll()
+                        .requestMatchers(HttpMethod.DELETE, "/api/publica/sessoes/contextos-sociais-pendentes/*")
+                        .permitAll()
                         .requestMatchers("/api/publica/recuperacoes-senha/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/identidade/vinculos-sociais")
                         .hasAnyAuthority("SCOPE_vinculos:ler", "ROLE_cliente")
                         .requestMatchers(HttpMethod.GET, "/identidade/vinculos-organizacionais")
                         .hasAnyAuthority("SCOPE_vinculos:ler", "ROLE_cliente")
+                        .requestMatchers(HttpMethod.POST, "/identidade/vinculos-sociais/*")
+                        .hasAnyAuthority("SCOPE_vinculos:escrever", "ROLE_cliente")
                         .requestMatchers(HttpMethod.POST, "/identidade/vinculos-sociais/*/sincronizacao")
                         .hasAnyAuthority("SCOPE_vinculos:escrever", "ROLE_cliente")
                         .requestMatchers(HttpMethod.DELETE, "/identidade/vinculos-sociais/*")

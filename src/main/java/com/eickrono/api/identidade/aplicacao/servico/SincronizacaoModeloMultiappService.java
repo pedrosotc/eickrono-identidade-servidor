@@ -7,7 +7,6 @@ import com.eickrono.api.identidade.dominio.modelo.DesafioAtestacaoApp;
 import com.eickrono.api.identidade.dominio.modelo.DispositivoIdentidade;
 import com.eickrono.api.identidade.dominio.modelo.RecuperacaoSenha;
 import com.eickrono.api.identidade.dominio.modelo.RegistroDispositivo;
-import com.eickrono.api.identidade.dominio.modelo.StatusCadastroConta;
 import com.eickrono.api.identidade.dominio.modelo.TokenDispositivo;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -42,7 +41,10 @@ public class SincronizacaoModeloMultiappService {
 
     public void sincronizarCadastro(final CadastroConta cadastroConta) {
         Objects.requireNonNull(cadastroConta, "cadastroConta é obrigatório");
-        Long clienteEcossistemaId = assegurarClientePadrao(cadastroConta.getAtualizadoEm());
+        Long clienteEcossistemaId = Objects.requireNonNullElseGet(
+                cadastroConta.getClienteEcossistemaId(),
+                () -> assegurarClientePadrao(cadastroConta.getAtualizadoEm())
+        );
         Long sistemaOrigemId = assegurarSistemaOrigem(cadastroConta.getSistemaSolicitante(), cadastroConta.getAtualizadoEm());
         UUID pessoaId = gerarPessoaId(cadastroConta.getSubjectRemoto());
         UUID usuarioId = null;
@@ -74,7 +76,20 @@ public class SincronizacaoModeloMultiappService {
                 .addValue("tentativasConfirmacaoEmail", cadastroConta.getTentativasConfirmacaoEmail())
                 .addValue("reenviosEmail", cadastroConta.getReenviosEmail())
                 .addValue("emailConfirmadoEm", cadastroConta.getEmailConfirmadoEm())
-                .addValue("concluidoEm", cadastroConta.emailJaConfirmado() ? cadastroConta.getEmailConfirmadoEm() : null)
+                .addValue("localeSolicitante", cadastroConta.getLocaleSolicitante())
+                .addValue("timeZoneSolicitante", cadastroConta.getTimeZoneSolicitante())
+                .addValue("tipoProdutoExibicao", cadastroConta.getTipoProdutoExibicao())
+                .addValue("produtoExibicao", cadastroConta.getProdutoExibicao())
+                .addValue("canalExibicao", cadastroConta.getCanalExibicao())
+                .addValue("empresaExibicao", cadastroConta.getEmpresaExibicao())
+                .addValue("ambienteExibicao", cadastroConta.getAmbienteExibicao())
+                .addValue("exigeValidacaoTelefoneSnapshot", cadastroConta.getExigeValidacaoTelefoneSnapshot())
+                .addValue(
+                        "concluidoEm",
+                        cadastroConta.emailJaConfirmado() && cadastroConta.etapaTelefoneConcluida()
+                                ? cadastroConta.getAtualizadoEm()
+                                : null
+                )
                 .addValue("ipSolicitante", cadastroConta.getIpSolicitante())
                 .addValue("userAgentSolicitante", cadastroConta.getUserAgentSolicitante())
                 .addValue("criadoEm", cadastroConta.getCriadoEm())
@@ -96,6 +111,14 @@ public class SincronizacaoModeloMultiappService {
                     tentativas_confirmacao_email,
                     reenvios_email,
                     email_confirmado_em,
+                    locale_solicitante,
+                    time_zone_solicitante,
+                    tipo_produto_exibicao,
+                    produto_exibicao,
+                    canal_exibicao,
+                    empresa_exibicao,
+                    ambiente_exibicao,
+                    exige_validacao_telefone_snapshot,
                     concluido_em,
                     ip_solicitante,
                     user_agent_solicitante,
@@ -117,6 +140,14 @@ public class SincronizacaoModeloMultiappService {
                     :tentativasConfirmacaoEmail,
                     :reenviosEmail,
                     :emailConfirmadoEm,
+                    :localeSolicitante,
+                    :timeZoneSolicitante,
+                    :tipoProdutoExibicao,
+                    :produtoExibicao,
+                    :canalExibicao,
+                    :empresaExibicao,
+                    :ambienteExibicao,
+                    :exigeValidacaoTelefoneSnapshot,
                     :concluidoEm,
                     :ipSolicitante,
                     :userAgentSolicitante,
@@ -137,6 +168,14 @@ public class SincronizacaoModeloMultiappService {
                     tentativas_confirmacao_email = EXCLUDED.tentativas_confirmacao_email,
                     reenvios_email = EXCLUDED.reenvios_email,
                     email_confirmado_em = EXCLUDED.email_confirmado_em,
+                    locale_solicitante = EXCLUDED.locale_solicitante,
+                    time_zone_solicitante = EXCLUDED.time_zone_solicitante,
+                    tipo_produto_exibicao = EXCLUDED.tipo_produto_exibicao,
+                    produto_exibicao = EXCLUDED.produto_exibicao,
+                    canal_exibicao = EXCLUDED.canal_exibicao,
+                    empresa_exibicao = EXCLUDED.empresa_exibicao,
+                    ambiente_exibicao = EXCLUDED.ambiente_exibicao,
+                    exige_validacao_telefone_snapshot = EXCLUDED.exige_validacao_telefone_snapshot,
                     concluido_em = EXCLUDED.concluido_em,
                     ip_solicitante = EXCLUDED.ip_solicitante,
                     user_agent_solicitante = EXCLUDED.user_agent_solicitante,
@@ -162,7 +201,10 @@ public class SincronizacaoModeloMultiappService {
 
     public void sincronizarRecuperacaoSenha(final RecuperacaoSenha recuperacaoSenha) {
         Objects.requireNonNull(recuperacaoSenha, "recuperacaoSenha é obrigatória");
-        Long clienteEcossistemaId = assegurarClientePadrao(recuperacaoSenha.getAtualizadoEm());
+        Long clienteEcossistemaId = Objects.requireNonNullElseGet(
+                recuperacaoSenha.getClienteEcossistemaId(),
+                () -> assegurarClientePadrao(recuperacaoSenha.getAtualizadoEm())
+        );
         UUID usuarioId = null;
         if (recuperacaoSenha.possuiDestinoReal()) {
             usuarioId = assegurarUsuarioAtivo(
@@ -189,6 +231,14 @@ public class SincronizacaoModeloMultiappService {
                 .addValue("reenviosEmail", recuperacaoSenha.getReenviosEmail())
                 .addValue("codigoConfirmadoEm", recuperacaoSenha.getCodigoConfirmadoEm())
                 .addValue("senhaRedefinidaEm", recuperacaoSenha.getSenhaRedefinidaEm())
+                .addValue("localeSolicitante", recuperacaoSenha.getLocaleSolicitante())
+                .addValue("timeZoneSolicitante", recuperacaoSenha.getTimeZoneSolicitante())
+                .addValue("tipoProdutoExibicao", recuperacaoSenha.getTipoProdutoExibicao())
+                .addValue("produtoExibicao", recuperacaoSenha.getProdutoExibicao())
+                .addValue("canalExibicao", recuperacaoSenha.getCanalExibicao())
+                .addValue("empresaExibicao", recuperacaoSenha.getEmpresaExibicao())
+                .addValue("ambienteExibicao", recuperacaoSenha.getAmbienteExibicao())
+                .addValue("exigeValidacaoTelefoneSnapshot", recuperacaoSenha.getExigeValidacaoTelefoneSnapshot())
                 .addValue("criadoEm", recuperacaoSenha.getCriadoEm())
                 .addValue("atualizadoEm", recuperacaoSenha.getAtualizadoEm());
 
@@ -206,6 +256,14 @@ public class SincronizacaoModeloMultiappService {
                     reenvios_email,
                     codigo_confirmado_em,
                     senha_redefinida_em,
+                    locale_solicitante,
+                    time_zone_solicitante,
+                    tipo_produto_exibicao,
+                    produto_exibicao,
+                    canal_exibicao,
+                    empresa_exibicao,
+                    ambiente_exibicao,
+                    exige_validacao_telefone_snapshot,
                     criado_em,
                     atualizado_em
                 )
@@ -222,6 +280,14 @@ public class SincronizacaoModeloMultiappService {
                     :reenviosEmail,
                     :codigoConfirmadoEm,
                     :senhaRedefinidaEm,
+                    :localeSolicitante,
+                    :timeZoneSolicitante,
+                    :tipoProdutoExibicao,
+                    :produtoExibicao,
+                    :canalExibicao,
+                    :empresaExibicao,
+                    :ambienteExibicao,
+                    :exigeValidacaoTelefoneSnapshot,
                     :criadoEm,
                     :atualizadoEm
                 )
@@ -237,6 +303,14 @@ public class SincronizacaoModeloMultiappService {
                     reenvios_email = EXCLUDED.reenvios_email,
                     codigo_confirmado_em = EXCLUDED.codigo_confirmado_em,
                     senha_redefinida_em = EXCLUDED.senha_redefinida_em,
+                    locale_solicitante = EXCLUDED.locale_solicitante,
+                    time_zone_solicitante = EXCLUDED.time_zone_solicitante,
+                    tipo_produto_exibicao = EXCLUDED.tipo_produto_exibicao,
+                    produto_exibicao = EXCLUDED.produto_exibicao,
+                    canal_exibicao = EXCLUDED.canal_exibicao,
+                    empresa_exibicao = EXCLUDED.empresa_exibicao,
+                    ambiente_exibicao = EXCLUDED.ambiente_exibicao,
+                    exige_validacao_telefone_snapshot = EXCLUDED.exige_validacao_telefone_snapshot,
                     atualizado_em = EXCLUDED.atualizado_em
                 """, params);
     }
@@ -910,7 +984,9 @@ public class SincronizacaoModeloMultiappService {
     }
 
     private String mapearStatusCadastro(final CadastroConta cadastroConta) {
-        return cadastroConta.getStatus() == StatusCadastroConta.EMAIL_CONFIRMADO ? "CONCLUIDO" : "ABERTO";
+        return cadastroConta.emailJaConfirmado() && cadastroConta.etapaTelefoneConcluida()
+                ? "CONCLUIDO"
+                : "ABERTO";
     }
 
     private String mapearStatusRecuperacao(final RecuperacaoSenha recuperacaoSenha) {

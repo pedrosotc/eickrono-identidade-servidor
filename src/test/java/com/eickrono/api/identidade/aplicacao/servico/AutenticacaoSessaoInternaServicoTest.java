@@ -42,6 +42,10 @@ class AutenticacaoSessaoInternaServicoTest {
         properties.setRealm("eickrono");
         properties.setClientId("app-flutter-local");
         properties.setClientSecret("");
+        properties.setTokenExchangeClientId("autenticacao-servidor");
+        properties.setTokenExchangeClientSecret("segredo-token-exchange");
+        properties.setTokenExchangeAudience("app-flutter-local");
+        properties.setTokenExchangeScope("openid offline_access");
         properties.setPasswordPepper(PASSWORD_PEPPER);
 
         clienteAdministracaoCadastroKeycloak = Mockito.mock(ClienteAdministracaoCadastroKeycloak.class);
@@ -169,6 +173,71 @@ class AutenticacaoSessaoInternaServicoTest {
         assertThat(sessao.accessToken()).isEqualTo("access-token-novo");
         assertThat(sessao.refreshToken()).isEqualTo("refresh-token-novo");
         assertThat(sessao.expiresIn()).isEqualTo(1800L);
+        mockServer.verify();
+    }
+
+    @Test
+    @DisplayName("deve trocar token Google externo por sessao interna com refresh token")
+    void deveAutenticarSessaoInternaComGoogle() {
+        mockServer.expect(requestTo(URL_TOKEN))
+                .andExpect(method(POST))
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_FORM_URLENCODED))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString(
+                        "grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Atoken-exchange")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("client_id=autenticacao-servidor")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("client_secret=segredo-token-exchange")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("audience=app-flutter-local")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("scope=openid+offline_access")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("requested_token_type=urn%3Aietf%3Aparams%3Aoauth%3Atoken-type%3Arefresh_token")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("subject_issuer=google")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString(
+                        "subject_token_type=urn%3Aietf%3Aparams%3Aoauth%3Atoken-type%3Aaccess_token")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("subject_token=google-access-token")))
+                .andRespond(withSuccess("""
+                        {
+                          "access_token": "access-social-123",
+                          "refresh_token": "refresh-social-456",
+                          "expires_in": 3600,
+                          "token_type": "Bearer"
+                        }
+                        """, MediaType.APPLICATION_JSON));
+
+        SessaoInternaAutenticada sessao = servico.autenticarSocial("google", "google-access-token");
+
+        assertThat(sessao.autenticado()).isTrue();
+        assertThat(sessao.accessToken()).isEqualTo("access-social-123");
+        assertThat(sessao.refreshToken()).isEqualTo("refresh-social-456");
+        mockServer.verify();
+    }
+
+    @Test
+    @DisplayName("deve trocar token Apple JWT sem subject_issuer explicito")
+    void deveAutenticarSessaoInternaComApple() {
+        mockServer.expect(requestTo(URL_TOKEN))
+                .andExpect(method(POST))
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_FORM_URLENCODED))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString(
+                        "grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Atoken-exchange")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("client_id=autenticacao-servidor")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("requested_token_type=urn%3Aietf%3Aparams%3Aoauth%3Atoken-type%3Arefresh_token")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString(
+                        "subject_token_type=urn%3Aietf%3Aparams%3Aoauth%3Atoken-type%3Ajwt")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("subject_token=apple-id-token")))
+                .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("subject_issuer="))))
+                .andRespond(withSuccess("""
+                        {
+                          "access_token": "access-apple-123",
+                          "refresh_token": "refresh-apple-456",
+                          "expires_in": 3600,
+                          "token_type": "Bearer"
+                        }
+                        """, MediaType.APPLICATION_JSON));
+
+        SessaoInternaAutenticada sessao = servico.autenticarSocial("apple", "apple-id-token");
+
+        assertThat(sessao.autenticado()).isTrue();
+        assertThat(sessao.accessToken()).isEqualTo("access-apple-123");
+        assertThat(sessao.refreshToken()).isEqualTo("refresh-apple-456");
         mockServer.verify();
     }
 }

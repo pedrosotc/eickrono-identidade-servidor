@@ -7,6 +7,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -34,6 +35,8 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.web.servlet.MockMvc;
@@ -62,6 +65,9 @@ class VinculosSociaisControllerIT {
 
     @MockBean
     private AutenticacaoSessaoInternaServico autenticacaoSessaoInternaServico;
+
+    @MockBean
+    private JwtDecoder jwtDecoder;
 
     @BeforeEach
     void limparEstado() {
@@ -145,9 +151,51 @@ class VinculosSociaisControllerIT {
                                 """)
                         .with(jwtEscopo("vinculos:escrever")))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.codigo").value("senha_confirmacao_obrigatoria"));
+                .andExpect(jsonPath("$.codigo").value("senha_confirmacao_obrigatoria"))
+                .andExpect(jsonPath("$.detalhes.provedor").value("google"))
+                .andExpect(jsonPath("$.detalhes.exigeReautenticacao").value(true));
 
         assertThat(vinculoSocialRepositorio.findAll()).hasSize(1);
+    }
+
+    @Test
+    void devePermitirRemoverVinculoSecundarioSemSenhaQuandoAindaExistirOutraCredencialSocial() throws Exception {
+        keycloakStub.definirIdentidadesFederadas(
+                "sub-123",
+                List.of(
+                        new IdentidadeFederadaKeycloak(
+                                ProvedorVinculoSocial.GOOGLE,
+                                "google-sub-1",
+                                "teste@gmail.com"),
+                        new IdentidadeFederadaKeycloak(
+                                ProvedorVinculoSocial.APPLE,
+                                "apple-sub-1",
+                                "usuario@icloud.test")));
+
+        mockMvc.perform(post(ENDPOINT + "/google/sincronizacao")
+                        .with(jwtEscopo("vinculos:escrever")))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(delete(ENDPOINT + "/google")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "senhaConfirmacao": "   "
+                                }
+                                """)
+                        .with(jwtEscopo("vinculos:escrever")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.provedores[0].provedor").value("google"))
+                .andExpect(jsonPath("$.provedores[0].vinculado").value(false));
+
+        assertThat(vinculoSocialRepositorio.findAll())
+                .extracting(VinculoSocial::getProvedor)
+                .containsExactly("apple");
+        assertThat(formaAcessoRepositorio.findAll().stream()
+                .filter(forma -> forma.getTipo() == TipoFormaAcesso.SOCIAL)
+                .toList())
+                .extracting(FormaAcesso::getProvedor)
+                .containsExactly("APPLE");
     }
 
     @Test
@@ -190,6 +238,90 @@ class VinculosSociaisControllerIT {
         mockMvc.perform(get(ENDPOINT)
                         .with(jwtSemEscopo()))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void deveVincularRedeSocialNativamenteSemHtml() throws Exception {
+        when(autenticacaoSessaoInternaServico.autenticarSocial(
+                eq("google"),
+                eq("google-access-token")))
+                .thenReturn(new SessaoInternaAutenticada(
+                        true,
+                        "Bearer",
+                        "access-social-google",
+                        "refresh-social-google",
+                        300));
+        when(jwtDecoder.decode("access-social-google"))
+                .thenReturn(Jwt.withTokenValue("access-social-google")
+                        .header("alg", "none")
+                        .subject("sub-social-google")
+                        .claim("email", "teste@gmail.com")
+                        .build());
+        keycloakStub.definirIdentidadesFederadas(
+                "sub-social-google",
+                List.of(new IdentidadeFederadaKeycloak(
+                        ProvedorVinculoSocial.GOOGLE,
+                        "google-sub-1",
+                        "teste@gmail.com")));
+
+        mockMvc.perform(post(ENDPOINT + "/google")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "tokenExterno": "google-access-token"
+                                }
+                                """)
+                        .with(jwtEscopo("vinculos:escrever")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.provedores[0].provedor").value("google"))
+                .andExpect(jsonPath("$.provedores[0].vinculado").value(true))
+                .andExpect(jsonPath("$.provedores[0].identificadorMascarado").value("t***@gmail.com"));
+
+        assertThat(vinculoSocialRepositorio.findAll())
+                .extracting(VinculoSocial::getProvedor, VinculoSocial::getIdentificador)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("google", "teste@gmail.com"));
+        assertThat(formaAcessoRepositorio.findAll().stream()
+                .filter(forma -> forma.getTipo() == TipoFormaAcesso.SOCIAL)
+                .toList())
+                .extracting(FormaAcesso::getProvedor, FormaAcesso::getIdentificador)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("GOOGLE", "google-sub-1"));
+    }
+
+    @Test
+    void deveAtualizarAvatarPreferidoSocialPorProjeto() throws Exception {
+        keycloakStub.definirIdentidadesFederadas(
+                "sub-123",
+                List.of(new IdentidadeFederadaKeycloak(
+                        ProvedorVinculoSocial.GOOGLE,
+                        "google-sub-1",
+                        "teste@gmail.com",
+                        "Pessoa Google",
+                        "https://cdn.eickrono.test/google.png")));
+
+        mockMvc.perform(post(ENDPOINT + "/google/sincronizacao")
+                        .param("aplicacaoId", "eickrono-thimisu-app")
+                        .with(jwtEscopo("vinculos:escrever")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.provedores[0].urlAvatarExterno")
+                        .value("https://cdn.eickrono.test/google.png"));
+
+        mockMvc.perform(put(ENDPOINT + "/avatar-preferido")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "aplicacaoId": "eickrono-thimisu-app",
+                                  "origem": "SOCIAL",
+                                  "provedor": "google"
+                                }
+                                """)
+                        .with(jwtEscopo("vinculos:escrever")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.avatarPreferidoOrigem").value("SOCIAL"))
+                .andExpect(jsonPath("$.avatarPreferidoUrl").value("https://cdn.eickrono.test/google.png"))
+                .andExpect(jsonPath("$.provedores[0].provedor").value("google"))
+                .andExpect(jsonPath("$.provedores[0].avatarPrincipalNoProjeto").value(true))
+                .andExpect(jsonPath("$.provedores[0].urlAvatarExterno")
+                        .value("https://cdn.eickrono.test/google.png"));
     }
 
     private org.springframework.test.web.servlet.request.RequestPostProcessor jwtEscopo(final String escopo) {

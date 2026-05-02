@@ -8,18 +8,21 @@ import java.util.Optional;
  * Provedores sociais suportados pela API de identidade.
  */
 public enum ProvedorVinculoSocial {
-    GOOGLE("google", true),
-    APPLE("apple", true),
-    FACEBOOK("facebook", false),
-    LINKEDIN("linkedin", true),
-    INSTAGRAM("instagram", false);
+    GOOGLE(true, "google"),
+    APPLE(true, "apple"),
+    FACEBOOK(false, "facebook"),
+    LINKEDIN(true, "linkedin"),
+    INSTAGRAM(false, "instagram"),
+    X(false, "x");
 
     private final String aliasApi;
     private final boolean trustEmail;
+    private final String[] aliasesAceitos;
 
-    ProvedorVinculoSocial(final String aliasApi, final boolean trustEmail) {
+    ProvedorVinculoSocial(final boolean trustEmail, final String aliasApi, final String... aliasesAceitos) {
         this.aliasApi = aliasApi;
         this.trustEmail = trustEmail;
+        this.aliasesAceitos = aliasesAceitos;
     }
 
     public String getAliasApi() {
@@ -40,7 +43,8 @@ public enum ProvedorVinculoSocial {
         }
         String aliasNormalizado = alias.trim().toLowerCase(Locale.ROOT);
         return Arrays.stream(values())
-                .filter(provedor -> provedor.aliasApi.equals(aliasNormalizado))
+                .filter(provedor -> provedor.aliasApi.equals(aliasNormalizado)
+                        || Arrays.stream(provedor.aliasesAceitos).anyMatch(aliasNormalizado::equals))
                 .findFirst();
     }
 }

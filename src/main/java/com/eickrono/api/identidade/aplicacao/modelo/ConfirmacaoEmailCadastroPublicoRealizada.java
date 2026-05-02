@@ -9,6 +9,9 @@ public record ConfirmacaoEmailCadastroPublicoRealizada(
         String usuarioId,
         String statusUsuario,
         boolean emailConfirmado,
-        boolean podeAutenticar
+        boolean telefoneConfirmado,
+        boolean telefoneObrigatorio,
+        boolean podeAutenticar,
+        String proximoPasso
 ) {
 }

@@ -1,8 +1,8 @@
 package com.eickrono.api.identidade.aplicacao.servico;
 
+import com.eickrono.api.identidade.aplicacao.excecao.EntregaEmailException;
 import com.eickrono.api.identidade.dominio.modelo.RecuperacaoSenha;
 import com.eickrono.api.identidade.infraestrutura.configuracao.CadastroEmailProperties;
-import java.time.format.DateTimeFormatter;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,8 +13,6 @@ import org.springframework.mail.javamail.JavaMailSender;
 public class CanalEnvioCodigoRecuperacaoSenhaEmailSmtp implements CanalEnvioCodigoRecuperacaoSenhaEmail {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(CanalEnvioCodigoRecuperacaoSenhaEmailSmtp.class);
-    private static final DateTimeFormatter FORMATADOR_DATA_HORA = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm 'UTC'");
-
     private final JavaMailSender javaMailSender;
     private final CadastroEmailProperties cadastroEmailProperties;
 
@@ -46,12 +44,25 @@ public class CanalEnvioCodigoRecuperacaoSenhaEmailSmtp implements CanalEnvioCodi
         try {
             javaMailSender.send(mensagem);
             LOGGER.info(
-                    "Codigo de recuperacao de senha enviado por SMTP para {} (fluxoId={})",
+                    "Codigo de recuperacao de senha enviado por SMTP para {} (fluxoId={}, protocoloSuporte={})",
                     recuperacao.getEmailPrincipal(),
-                    recuperacao.getFluxoId()
+                    recuperacao.getFluxoId(),
+                    recuperacao.getProtocoloSuporte()
             );
         } catch (MailException ex) {
-            throw new IllegalStateException("Falha ao enviar o codigo de recuperacao de senha por SMTP.", ex);
+            LOGGER.error(
+                    "recuperacao_email_smtp_falhou fluxoId={} protocoloSuporte={} motivo={}",
+                    recuperacao.getFluxoId(),
+                    recuperacao.getProtocoloSuporte(),
+                    ex.getMessage(),
+                    ex
+            );
+            throw new EntregaEmailException(
+                    "recuperacao_email_indisponivel",
+                    "Não foi possível enviar o código de recuperação por e-mail agora. Tente novamente.",
+                    "Falha ao enviar o codigo de recuperacao de senha por SMTP.",
+                    ex
+            );
         }
     }
 
@@ -60,15 +71,39 @@ public class CanalEnvioCodigoRecuperacaoSenhaEmailSmtp implements CanalEnvioCodi
                 Ola,%n%n\
                 Voce solicitou a recuperacao de senha da sua conta no %s.%n%n\
                 Codigo de recuperacao: %s%n\
-                Solicitacao: %s%n\
+                Protocolo de atendimento: %s%n\
                 Validade ate: %s%n%n\
+                Referencia tecnica: %s%n%n\
+                Se voce precisar falar com o suporte, informe o protocolo acima.%n\
                 Se voce nao reconhece esta solicitacao, ignore esta mensagem.%n\
                 """
                 .formatted(
-                        cadastroEmailProperties.getNomeAplicacao(),
+                        FormatadorContextoEmailFluxoPublico.descreverOrigem(
+                                cadastroEmailProperties,
+                                new com.eickrono.api.identidade.aplicacao.modelo.ContextoSolicitacaoFluxoPublico(
+                                        recuperacaoSenha.getLocaleSolicitante(),
+                                        recuperacaoSenha.getTimeZoneSolicitante(),
+                                        recuperacaoSenha.getTipoProdutoExibicao(),
+                                        recuperacaoSenha.getProdutoExibicao(),
+                                        recuperacaoSenha.getCanalExibicao(),
+                                        recuperacaoSenha.getEmpresaExibicao(),
+                                        recuperacaoSenha.getAmbienteExibicao()
+                                )),
                         codigo,
-                        recuperacaoSenha.getFluxoId(),
-                        FORMATADOR_DATA_HORA.format(recuperacaoSenha.getCodigoEmailExpiraEm())
+                        recuperacaoSenha.getProtocoloSuporte(),
+                        FormatadorContextoEmailFluxoPublico.formatarValidadeLocal(
+                                recuperacaoSenha.getCodigoEmailExpiraEm(),
+                                new com.eickrono.api.identidade.aplicacao.modelo.ContextoSolicitacaoFluxoPublico(
+                                        recuperacaoSenha.getLocaleSolicitante(),
+                                        recuperacaoSenha.getTimeZoneSolicitante(),
+                                        recuperacaoSenha.getTipoProdutoExibicao(),
+                                        recuperacaoSenha.getProdutoExibicao(),
+                                        recuperacaoSenha.getCanalExibicao(),
+                                        recuperacaoSenha.getEmpresaExibicao(),
+                                        recuperacaoSenha.getAmbienteExibicao()
+                                )),
+                        FormatadorContextoEmailFluxoPublico.formatarReferenciaUtc(
+                                recuperacaoSenha.getCodigoEmailExpiraEm())
                 );
     }
 }

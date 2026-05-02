@@ -1,5 +1,6 @@
 package com.eickrono.api.identidade.dominio.modelo;
 
+import com.eickrono.api.identidade.aplicacao.modelo.ContextoSolicitacaoFluxoPublico;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -20,6 +21,9 @@ public class RecuperacaoSenha {
 
     @Column(name = "fluxo_id", nullable = false, unique = true)
     private UUID fluxoId;
+
+    @Column(name = "protocolo_suporte", nullable = false, unique = true, length = 40)
+    private String protocoloSuporte;
 
     @Column(name = "subject_remoto", length = 255)
     private String subjectRemoto;
@@ -48,6 +52,33 @@ public class RecuperacaoSenha {
     @Column(name = "senha_redefinida_em")
     private OffsetDateTime senhaRedefinidaEm;
 
+    @Column(name = "locale_solicitante", length = 16)
+    private String localeSolicitante;
+
+    @Column(name = "time_zone_solicitante", length = 64)
+    private String timeZoneSolicitante;
+
+    @Column(name = "tipo_produto_exibicao", length = 32)
+    private String tipoProdutoExibicao;
+
+    @Column(name = "produto_exibicao", length = 128)
+    private String produtoExibicao;
+
+    @Column(name = "canal_exibicao", length = 64)
+    private String canalExibicao;
+
+    @Column(name = "empresa_exibicao", length = 128)
+    private String empresaExibicao;
+
+    @Column(name = "ambiente_exibicao", length = 32)
+    private String ambienteExibicao;
+
+    @Column(name = "cliente_ecossistema_id")
+    private Long clienteEcossistemaId;
+
+    @Column(name = "exige_validacao_telefone_snapshot", nullable = false)
+    private boolean exigeValidacaoTelefoneSnapshot;
+
     @Column(name = "criado_em", nullable = false)
     private OffsetDateTime criadoEm;
 
@@ -66,7 +97,30 @@ public class RecuperacaoSenha {
                             final OffsetDateTime codigoEmailExpiraEm,
                             final OffsetDateTime criadoEm,
                             final OffsetDateTime atualizadoEm) {
+        this(
+                fluxoId,
+                subjectRemoto,
+                emailPrincipal,
+                codigoEmailHash,
+                codigoEmailGeradoEm,
+                codigoEmailExpiraEm,
+                criadoEm,
+                atualizadoEm,
+                null
+        );
+    }
+
+    public RecuperacaoSenha(final UUID fluxoId,
+                            final String subjectRemoto,
+                            final String emailPrincipal,
+                            final String codigoEmailHash,
+                            final OffsetDateTime codigoEmailGeradoEm,
+                            final OffsetDateTime codigoEmailExpiraEm,
+                            final OffsetDateTime criadoEm,
+                            final OffsetDateTime atualizadoEm,
+                            final ContextoSolicitacaoFluxoPublico contextoSolicitacao) {
         this.fluxoId = Objects.requireNonNull(fluxoId, "fluxoId é obrigatório");
+        this.protocoloSuporte = ProtocoloSuporte.gerarRecuperacaoSenha();
         this.subjectRemoto = subjectRemoto;
         this.emailPrincipal = Objects.requireNonNull(emailPrincipal, "emailPrincipal é obrigatório");
         this.codigoEmailHash = Objects.requireNonNull(codigoEmailHash, "codigoEmailHash é obrigatório");
@@ -76,6 +130,7 @@ public class RecuperacaoSenha {
         this.atualizadoEm = Objects.requireNonNull(atualizadoEm, "atualizadoEm é obrigatório");
         this.tentativasConfirmacaoEmail = 0;
         this.reenviosEmail = 0;
+        aplicarContextoSolicitacao(contextoSolicitacao);
     }
 
     public Long getId() {
@@ -88,6 +143,10 @@ public class RecuperacaoSenha {
 
     public String getSubjectRemoto() {
         return subjectRemoto;
+    }
+
+    public String getProtocoloSuporte() {
+        return protocoloSuporte;
     }
 
     public String getEmailPrincipal() {
@@ -122,8 +181,44 @@ public class RecuperacaoSenha {
         return senhaRedefinidaEm;
     }
 
+    public String getLocaleSolicitante() {
+        return localeSolicitante;
+    }
+
+    public String getTimeZoneSolicitante() {
+        return timeZoneSolicitante;
+    }
+
+    public String getTipoProdutoExibicao() {
+        return tipoProdutoExibicao;
+    }
+
+    public String getProdutoExibicao() {
+        return produtoExibicao;
+    }
+
+    public String getCanalExibicao() {
+        return canalExibicao;
+    }
+
+    public String getEmpresaExibicao() {
+        return empresaExibicao;
+    }
+
+    public String getAmbienteExibicao() {
+        return ambienteExibicao;
+    }
+
     public OffsetDateTime getCriadoEm() {
         return criadoEm;
+    }
+
+    public Long getClienteEcossistemaId() {
+        return clienteEcossistemaId;
+    }
+
+    public boolean getExigeValidacaoTelefoneSnapshot() {
+        return exigeValidacaoTelefoneSnapshot;
     }
 
     public OffsetDateTime getAtualizadoEm() {
@@ -175,5 +270,26 @@ public class RecuperacaoSenha {
     public void marcarSenhaRedefinida(final OffsetDateTime atualizadoEm) {
         this.senhaRedefinidaEm = Objects.requireNonNull(atualizadoEm, "atualizadoEm é obrigatório");
         this.atualizadoEm = atualizadoEm;
+    }
+
+    public void registrarProjetoFluxoPublico(final Long clienteEcossistemaId,
+                                             final boolean exigeValidacaoTelefoneSnapshot) {
+        this.clienteEcossistemaId = Objects.requireNonNull(
+                clienteEcossistemaId, "clienteEcossistemaId é obrigatório");
+        this.exigeValidacaoTelefoneSnapshot = exigeValidacaoTelefoneSnapshot;
+    }
+
+    private void aplicarContextoSolicitacao(final ContextoSolicitacaoFluxoPublico contextoSolicitacao) {
+        if (contextoSolicitacao == null) {
+            return;
+        }
+        ContextoSolicitacaoFluxoPublico contexto = contextoSolicitacao.sanitizado();
+        this.localeSolicitante = contexto.locale();
+        this.timeZoneSolicitante = contexto.timeZone();
+        this.tipoProdutoExibicao = contexto.tipoProdutoExibicao();
+        this.produtoExibicao = contexto.produtoExibicao();
+        this.canalExibicao = contexto.canalExibicao();
+        this.empresaExibicao = contexto.empresaExibicao();
+        this.ambienteExibicao = contexto.ambienteExibicao();
     }
 }

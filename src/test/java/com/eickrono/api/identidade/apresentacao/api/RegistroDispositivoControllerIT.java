@@ -72,6 +72,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.ContextConfiguration;
@@ -90,6 +91,8 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
 class RegistroDispositivoControllerIT {
 
     private static final String REGISTRO_ENDPOINT = "/identidade/dispositivos/registro";
+    private static final String SUB_CONTA_PROJETO_ATUAL = "sub-conta-projeto-atual";
+    private static final String EMAIL_CONTA_PROJETO_ATUAL = "entrar.vincular@eickrono.com";
 
     @Autowired
     private MockMvc mockMvc;
@@ -133,6 +136,9 @@ class RegistroDispositivoControllerIT {
     @Autowired
     private ClienteAdministracaoCadastroKeycloakStubConfiguration clienteAdministracaoCadastroKeycloakStub;
 
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
     @MockBean
     private ClienteContextoPessoaPerfil clienteContextoPessoaPerfil;
 
@@ -152,11 +158,38 @@ class RegistroDispositivoControllerIT {
     private final Map<UUID, String> codigosCadastroTelefone = new ConcurrentHashMap<>();
 
     @BeforeEach
-    @SuppressWarnings("unused")
     void setUp() {
         tokenDispositivoRepositorio().deleteAll();
         eventoOfflineDispositivoRepositorio().deleteAll();
         vinculoSocialRepositorio.deleteAll();
+        jdbcTemplate.update(
+                """
+                DELETE FROM autenticacao.contextos_sociais_pendentes
+                 WHERE usuario_id_sugerido IN (
+                           SELECT id
+                             FROM autenticacao.usuarios
+                            WHERE sub_remoto = ?
+                       )
+                    OR login_sugerido = ?
+                    OR email_social_normalizado = ?
+                """,
+                SUB_CONTA_PROJETO_ATUAL,
+                EMAIL_CONTA_PROJETO_ATUAL,
+                EMAIL_CONTA_PROJETO_ATUAL
+        );
+        jdbcTemplate.update("DELETE FROM autenticacao.contextos_sociais_pendentes");
+        jdbcTemplate.update(
+                "DELETE FROM autenticacao.usuarios_formas_acesso WHERE identificador_externo = ?",
+                EMAIL_CONTA_PROJETO_ATUAL
+        );
+        jdbcTemplate.update(
+                "DELETE FROM autenticacao.usuarios_clientes_ecossistema WHERE usuario_id IN (SELECT id FROM autenticacao.usuarios WHERE sub_remoto = ?)",
+                SUB_CONTA_PROJETO_ATUAL
+        );
+        jdbcTemplate.update(
+                "DELETE FROM autenticacao.usuarios WHERE sub_remoto = ?",
+                SUB_CONTA_PROJETO_ATUAL
+        );
         formaAcessoRepositorio.deleteAll();
         perfilIdentidadeRepositorio.deleteAll();
         pessoaRepositorio.deleteAll();
@@ -350,6 +383,7 @@ class RegistroDispositivoControllerIT {
                         .content("""
                                 {
                                   "plataforma": "IOS",
+                                  "aplicacaoId": "eickrono-thimisu-app",
                                   "identificadorInstalacao": "instalacao-social-1",
                                   "modelo": "iPhone15,2",
                                   "fabricante": "Apple",
@@ -389,14 +423,13 @@ class RegistroDispositivoControllerIT {
                         "google-user-123",
                         "ana.google"
                 ),
+                "eickrono-thimisu-app",
                 "app-flutter-publico",
                 "127.0.0.1",
                 "JUnit"
         );
         String codigo = Optional.ofNullable(codigosCadastroEmail.get(cadastro.cadastroId()))
                 .orElseThrow(() -> new IllegalStateException("Codigo de cadastro nao capturado"));
-        String codigoTelefone = Optional.ofNullable(codigosCadastroTelefone.get(cadastro.cadastroId()))
-                .orElseThrow(() -> new IllegalStateException("Codigo de telefone do cadastro nao capturado"));
         Pessoa pessoaPendente = pessoaRepositorio.save(new Pessoa(
                 cadastro.subjectRemoto(),
                 cadastro.emailPrincipal(),
@@ -422,7 +455,7 @@ class RegistroDispositivoControllerIT {
                 ));
 
         ConfirmacaoEmailCadastroPublicoRealizada confirmacao =
-                cadastroContaInternaServico.confirmarEmailPublico(cadastro.cadastroId(), codigo, codigoTelefone);
+                cadastroContaInternaServico.confirmarEmailPublico(cadastro.cadastroId(), codigo, null);
 
         CadastroConta cadastroPersistido = cadastroContaRepositorio.findByCadastroId(cadastro.cadastroId())
                 .orElseThrow(() -> new IllegalStateException("Cadastro nao persistido"));
@@ -468,6 +501,7 @@ class RegistroDispositivoControllerIT {
                         .content("""
                                 {
                                   "plataforma": "IOS",
+                                  "aplicacaoId": "eickrono-thimisu-app",
                                   "identificadorInstalacao": "instalacao-social-confirmado-1",
                                   "modelo": "iPhone15,2",
                                   "fabricante": "Apple",
@@ -522,14 +556,13 @@ class RegistroDispositivoControllerIT {
                         false,
                         OffsetDateTime.parse("2026-05-01T00:00:00Z")
                 ),
+                "eickrono-thimisu-app",
                 "app-flutter-publico",
                 "127.0.0.1",
                 "JUnit"
         );
         String codigo = Optional.ofNullable(codigosCadastroEmail.get(cadastro.cadastroId()))
                 .orElseThrow(() -> new IllegalStateException("Codigo de cadastro nao capturado"));
-        String codigoTelefone = Optional.ofNullable(codigosCadastroTelefone.get(cadastro.cadastroId()))
-                .orElseThrow(() -> new IllegalStateException("Codigo de telefone do cadastro nao capturado"));
         Pessoa pessoaPendente = pessoaRepositorio.save(new Pessoa(
                 cadastro.subjectRemoto(),
                 cadastro.emailPrincipal(),
@@ -554,7 +587,7 @@ class RegistroDispositivoControllerIT {
                         "ATIVO"
                 ));
 
-        cadastroContaInternaServico.confirmarEmailPublico(cadastro.cadastroId(), codigo, codigoTelefone);
+        cadastroContaInternaServico.confirmarEmailPublico(cadastro.cadastroId(), codigo, null);
 
         VinculoOrganizacional vinculo = vinculoOrganizacionalRepositorio
                 .findByOrganizacaoIdAndUsuarioIdPerfil("org-acme", "usuario-jane-001")
@@ -581,12 +614,17 @@ class RegistroDispositivoControllerIT {
                 ))
         );
 
-        mockMvc().perform(post(REGISTRO_ENDPOINT + "/silencioso")
-                        .with(Objects.requireNonNull(clienteJwt()))
+        String resposta = mockMvc().perform(post(REGISTRO_ENDPOINT + "/silencioso")
+                        .with(Objects.requireNonNull(clienteJwt(
+                                "usuario-xyz",
+                                "social.sem.conta.local@eickrono.com",
+                                "Usuario Teste"
+                        )))
                         .contentType(Objects.requireNonNull(jsonMediaType()))
                         .content("""
                                 {
                                   "plataforma": "IOS",
+                                  "aplicacaoId": "eickrono-thimisu-app",
                                   "identificadorInstalacao": "instalacao-social-1",
                                   "modelo": "iPhone15,2",
                                   "fabricante": "Apple",
@@ -597,12 +635,31 @@ class RegistroDispositivoControllerIT {
                                 """))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.codigo").value("social_sem_conta_local"))
-                .andExpect(jsonPath("$.mensagem").value("Para entrar com esta rede social, primeiro associe esta rede à sua conta."))
+                .andExpect(jsonPath("$.mensagem").value("Esta rede social foi autenticada com sucesso, mas ainda nao esta ligada a uma conta local. Deseja abrir o cadastro com os dados recebidos?"))
                 .andExpect(jsonPath("$.detalhes.sub").value("usuario-xyz"))
-                .andExpect(jsonPath("$.detalhes.acaoSugerida").value("VINCULAR_OU_CADASTRAR"))
+                .andExpect(jsonPath("$.detalhes.acaoSugerida").value("ABRIR_CADASTRO"))
                 .andExpect(jsonPath("$.detalhes.provedor").value("google"))
                 .andExpect(jsonPath("$.detalhes.identificadorExterno").value("google-user-123"))
-                .andExpect(jsonPath("$.detalhes.nomeUsuarioExterno").value("ana.google"));
+                .andExpect(jsonPath("$.detalhes.nomeUsuarioExterno").value("ana.google"))
+                .andExpect(jsonPath("$.detalhes.contextoSocialPendenteId").isNotEmpty())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        String contextoId = objectMapper.readTree(resposta)
+                .path("detalhes")
+                .path("contextoSocialPendenteId")
+                .asText();
+        Map<String, Object> contextoPersistido = jdbcTemplate.queryForMap("""
+                SELECT modo_pendente,
+                       usuario_id_sugerido,
+                       email_social_normalizado
+                  FROM autenticacao.contextos_sociais_pendentes
+                 WHERE id = ?::uuid
+                """, contextoId);
+        assertThat(contextoPersistido.get("modo_pendente")).isEqualTo("ABRIR_CADASTRO");
+        assertThat(contextoPersistido.get("usuario_id_sugerido")).isNull();
+        assertThat(contextoPersistido.get("email_social_normalizado")).isEqualTo("social.sem.conta.local@eickrono.com");
     }
 
     @Test
@@ -645,6 +702,7 @@ class RegistroDispositivoControllerIT {
                         .content("""
                                 {
                                   "plataforma": "IOS",
+                                  "aplicacaoId": "eickrono-thimisu-app",
                                   "identificadorInstalacao": "instalacao-social-bloqueado-1",
                                   "modelo": "iPhone15,2",
                                   "fabricante": "Apple",
@@ -663,6 +721,109 @@ class RegistroDispositivoControllerIT {
     }
 
     @Test
+    void deveSugerirEntrarEVincularQuandoSessaoSocialEncontrarContaLocalNoProjetoAtualPorEmail() throws Exception {
+        when(clienteContextoPessoaPerfil.buscarPorSub("usuario-sem-conta-local"))
+                .thenReturn(Optional.empty());
+        vincularContaLocalAoProjetoAtual(SUB_CONTA_PROJETO_ATUAL, EMAIL_CONTA_PROJETO_ATUAL);
+        clienteAdministracaoCadastroKeycloakStub.definirIdentidadesFederadas(
+                "usuario-sem-conta-local",
+                java.util.List.of(new IdentidadeFederadaKeycloak(
+                        ProvedorVinculoSocial.GOOGLE,
+                        "google-user-123",
+                        "ana.google"
+                ))
+        );
+
+        String resposta = mockMvc().perform(post(REGISTRO_ENDPOINT + "/silencioso")
+                        .with(Objects.requireNonNull(clienteJwt(
+                                "usuario-sem-conta-local",
+                                EMAIL_CONTA_PROJETO_ATUAL,
+                                "Usuario Teste"
+                        )))
+                        .contentType(Objects.requireNonNull(jsonMediaType()))
+                        .content("""
+                                {
+                                  "plataforma": "IOS",
+                                  "aplicacaoId": "eickrono-thimisu-app",
+                                  "identificadorInstalacao": "instalacao-social-1",
+                                  "modelo": "iPhone15,2",
+                                  "fabricante": "Apple",
+                                  "sistemaOperacional": "iOS",
+                                  "versaoSistema": "iOS 18.0",
+                                  "versaoApp": "1.2.3+45"
+                                }
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.codigo").value("social_sem_conta_local"))
+                .andExpect(jsonPath("$.mensagem").value("Ja existe uma conta neste projeto com o mesmo e-mail desta rede social. Deseja entrar e vincular agora?"))
+                .andExpect(jsonPath("$.detalhes.sub").value("usuario-sem-conta-local"))
+                .andExpect(jsonPath("$.detalhes.acaoSugerida").value("ENTRAR_E_VINCULAR"))
+                .andExpect(jsonPath("$.detalhes.email").value(EMAIL_CONTA_PROJETO_ATUAL))
+                .andExpect(jsonPath("$.detalhes.loginSugerido").value(EMAIL_CONTA_PROJETO_ATUAL))
+                .andExpect(jsonPath("$.detalhes.emailContaExistente").value(EMAIL_CONTA_PROJETO_ATUAL))
+                .andExpect(jsonPath("$.detalhes.provedor").value("google"))
+                .andExpect(jsonPath("$.detalhes.identificadorExterno").value("google-user-123"))
+                .andExpect(jsonPath("$.detalhes.nomeUsuarioExterno").value("ana.google"))
+                .andExpect(jsonPath("$.detalhes.contextoSocialPendenteId").isNotEmpty())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        String contextoId = objectMapper.readTree(resposta)
+                .path("detalhes")
+                .path("contextoSocialPendenteId")
+                .asText();
+        Map<String, Object> contextoPersistido = jdbcTemplate.queryForMap("""
+                SELECT modo_pendente,
+                       usuario_id_sugerido,
+                       login_sugerido,
+                       email_social_normalizado
+                  FROM autenticacao.contextos_sociais_pendentes
+                 WHERE id = ?::uuid
+                """, contextoId);
+        assertThat(contextoPersistido.get("modo_pendente")).isEqualTo("ENTRAR_E_VINCULAR");
+        assertThat(contextoPersistido.get("usuario_id_sugerido")).isNotNull();
+        assertThat(contextoPersistido.get("login_sugerido")).isEqualTo(EMAIL_CONTA_PROJETO_ATUAL);
+        assertThat(contextoPersistido.get("email_social_normalizado")).isEqualTo(EMAIL_CONTA_PROJETO_ATUAL);
+    }
+
+    @Test
+    void deveResponderContaDesabilitadaQuandoSessaoSocialEncontrarContaBloqueada() throws Exception {
+        when(clienteContextoPessoaPerfil.buscarPorSub("usuario-xyz"))
+                .thenReturn(Optional.of(new ContextoPessoaPerfil(
+                        123L,
+                        "usuario-xyz",
+                        "teste@eickrono.com",
+                        "Usuario Teste",
+                        "usuario-001",
+                        "DESABILITADO"
+                )));
+
+        mockMvc().perform(post(REGISTRO_ENDPOINT + "/silencioso")
+                        .with(Objects.requireNonNull(clienteJwt()))
+                        .contentType(Objects.requireNonNull(jsonMediaType()))
+                        .content("""
+                                {
+                                  "plataforma": "IOS",
+                                  "aplicacaoId": "eickrono-thimisu-app",
+                                  "identificadorInstalacao": "instalacao-social-desabilitado-1",
+                                  "modelo": "iPhone15,2",
+                                  "fabricante": "Apple",
+                                  "sistemaOperacional": "iOS",
+                                  "versaoSistema": "iOS 18.0",
+                                  "versaoApp": "1.2.3+45"
+                                }
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.codigo").value("conta_desabilitada"))
+                .andExpect(jsonPath("$.mensagem").value("A conta está desabilitada para autenticação."))
+                .andExpect(jsonPath("$.detalhes.sub").value("usuario-xyz"))
+                .andExpect(jsonPath("$.detalhes.statusUsuario").value("DESABILITADO"))
+                .andExpect(jsonPath("$.detalhes.email").value("teste@eickrono.com"))
+                .andExpect(jsonPath("$.detalhes.motivoBloqueio").value("STATUS_DESABILITADO"))
+                .andExpect(jsonPath("$.detalhes.acaoSugerida").value("SUPORTE"));
+    }
+
     void deveBloquearSessaoSocialQuandoContaLocalEncontradaAindaNaoPossuirEmailVerificado() throws Exception {
         Pessoa pessoa = pessoaRepositorio.save(new Pessoa(
                 "sub-conta-local",
@@ -743,6 +904,7 @@ class RegistroDispositivoControllerIT {
                         .content("""
                                 {
                                   "plataforma": "IOS",
+                                  "aplicacaoId": "eickrono-thimisu-app",
                                   "identificadorInstalacao": "instalacao-social-facebook-1",
                                   "modelo": "iPhone15,2",
                                   "fabricante": "Apple",
@@ -815,6 +977,7 @@ class RegistroDispositivoControllerIT {
                         .content("""
                                 {
                                   "plataforma": "IOS",
+                                  "aplicacaoId": "eickrono-thimisu-app",
                                   "identificadorInstalacao": "instalacao-social-2",
                                   "modelo": "iPhone15,2",
                                   "fabricante": "Apple",
@@ -897,6 +1060,94 @@ class RegistroDispositivoControllerIT {
 
     private MediaType jsonMediaType() {
         return Objects.requireNonNull(MediaType.APPLICATION_JSON);
+    }
+
+    private void vincularContaLocalAoProjetoAtual(final String subRemoto, final String email) {
+        final Long clienteEcossistemaId = buscarClienteEcossistemaId("eickrono-thimisu-app");
+        final UUID usuarioId = UUID.randomUUID();
+        final UUID pessoaId = UUID.randomUUID();
+        final OffsetDateTime agora = OffsetDateTime.parse("2026-03-19T10:00:00Z");
+        final String emailNormalizado = email.trim().toLowerCase();
+
+        jdbcTemplate.update("""
+                INSERT INTO autenticacao.usuarios (
+                    id,
+                    pessoa_id,
+                    sub_remoto,
+                    status_global,
+                    credencial_local_habilitada,
+                    ultimo_login_em,
+                    criado_em,
+                    atualizado_em
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                usuarioId,
+                pessoaId,
+                subRemoto,
+                "ATIVO",
+                true,
+                null,
+                agora,
+                agora);
+        jdbcTemplate.update("""
+                INSERT INTO autenticacao.usuarios_clientes_ecossistema (
+                    id,
+                    usuario_id,
+                    cliente_ecossistema_id,
+                    status_vinculo,
+                    identificador_publico_cliente,
+                    ultimo_acesso_em,
+                    vinculado_em,
+                    atualizado_em,
+                    revogado_em,
+                    motivo_revogacao
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                UUID.randomUUID(),
+                usuarioId,
+                clienteEcossistemaId,
+                "ATIVO",
+                null,
+                agora,
+                agora,
+                agora,
+                null,
+                null);
+        jdbcTemplate.update("""
+                INSERT INTO autenticacao.usuarios_formas_acesso (
+                    id,
+                    usuario_id,
+                    email_id,
+                    tipo,
+                    provedor,
+                    identificador_externo,
+                    principal,
+                    verificado_em,
+                    vinculado_em,
+                    desvinculado_em
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                UUID.randomUUID(),
+                usuarioId,
+                UUID.randomUUID(),
+                "EMAIL_SENHA",
+                "EMAIL",
+                emailNormalizado,
+                true,
+                agora,
+                agora,
+                null);
+    }
+
+    private Long buscarClienteEcossistemaId(final String codigoProjeto) {
+        return Objects.requireNonNull(jdbcTemplate.queryForObject(
+                "SELECT id FROM catalogo.clientes_ecossistema WHERE codigo = ?",
+                Long.class,
+                codigoProjeto
+        ));
     }
 
     static class CodigoCapturador {

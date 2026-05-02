@@ -4,6 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 
 public record DispositivoSessaoApiRequest(
         @NotBlank String plataforma,
+        String aplicacaoId,
         String identificadorInstalacao,
         String modelo,
         String fabricante,

@@ -3,8 +3,11 @@ package com.eickrono.api.identidade.aplicacao.servico;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -16,7 +19,9 @@ import com.eickrono.api.identidade.aplicacao.modelo.CadastroKeycloakProvisionado
 import com.eickrono.api.identidade.aplicacao.modelo.ConfirmacaoEmailCadastroInternoRealizada;
 import com.eickrono.api.identidade.aplicacao.modelo.ConfirmacaoEmailCadastroPublicoRealizada;
 import com.eickrono.api.identidade.aplicacao.modelo.ConviteOrganizacionalValidado;
+import com.eickrono.api.identidade.aplicacao.modelo.ContextoSolicitacaoFluxoPublico;
 import com.eickrono.api.identidade.aplicacao.modelo.IdentidadeFederadaKeycloak;
+import com.eickrono.api.identidade.aplicacao.modelo.ProjetoFluxoPublicoResolvido;
 import com.eickrono.api.identidade.aplicacao.modelo.ProvisionamentoPerfilRealizado;
 import com.eickrono.api.identidade.aplicacao.modelo.VinculoSocialPendenteCadastro;
 import com.eickrono.api.identidade.aplicacao.modelo.ContextoPessoaPerfil;
@@ -38,6 +43,7 @@ import com.eickrono.api.identidade.dominio.repositorio.ConviteOrganizacionalRepo
 import com.eickrono.api.identidade.dominio.repositorio.FormaAcessoRepositorio;
 import com.eickrono.api.identidade.dominio.repositorio.PerfilIdentidadeRepositorio;
 import com.eickrono.api.identidade.dominio.repositorio.PessoaRepositorio;
+import com.eickrono.api.identidade.dominio.repositorio.RecuperacaoSenhaRepositorio;
 import com.eickrono.api.identidade.dominio.repositorio.VinculoOrganizacionalRepositorio;
 import com.eickrono.api.identidade.dominio.repositorio.VinculoSocialRepositorio;
 import com.eickrono.api.identidade.infraestrutura.configuracao.DispositivoProperties;
@@ -49,7 +55,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.http.HttpStatus;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -67,6 +72,9 @@ class CadastroContaInternaServicoTest {
 
     @Mock
     private FormaAcessoRepositorio formaAcessoRepositorio;
+
+    @Mock
+    private RecuperacaoSenhaRepositorio recuperacaoSenhaRepositorio;
 
     @Mock
     private PessoaRepositorio pessoaRepositorio;
@@ -99,6 +107,9 @@ class CadastroContaInternaServicoTest {
     private CanalNotificacaoTentativaCadastroEmail canalNotificacaoTentativaCadastroEmail;
 
     @Mock
+    private AuditoriaService auditoriaService;
+
+    @Mock
     private ClienteContextoPessoaPerfil clienteContextoPessoaPerfil;
 
     @Mock
@@ -125,18 +136,15 @@ class CadastroContaInternaServicoTest {
     private CadastroContaInternaServico servico;
     private CadastroContaInternaServico servicoPublico;
 
-    @BeforeEach
-    void setUp() {
-        DispositivoProperties dispositivoProperties = new DispositivoProperties();
-        dispositivoProperties.getCodigo().setSegredoHmac("test-code-secret");
-        dispositivoProperties.getCodigo().setTamanho(6);
-        dispositivoProperties.getCodigo().setTentativasMaximas(5);
-        dispositivoProperties.getCodigo().setReenviosMaximos(3);
-        dispositivoProperties.getCodigo().setExpiracaoHoras(9);
-
+    private CadastroContaInternaServico servico() {
+        if (servico != null) {
+            return servico;
+        }
+        DispositivoProperties dispositivoProperties = criarDispositivoProperties();
         Clock clock = Clock.fixed(Instant.parse("2026-03-19T10:00:00Z"), ZoneOffset.UTC);
         servico = new CadastroContaInternaServico(
                 cadastroContaRepositorio,
+                recuperacaoSenhaRepositorio,
                 formaAcessoRepositorio,
                 clienteAdministracaoCadastroKeycloak,
                 provisionamentoIdentidadeService,
@@ -145,8 +153,18 @@ class CadastroContaInternaServicoTest {
                 dispositivoProperties,
                 clock
         );
+        return servico;
+    }
+
+    private CadastroContaInternaServico servicoPublico() {
+        if (servicoPublico != null) {
+            return servicoPublico;
+        }
+        DispositivoProperties dispositivoProperties = criarDispositivoProperties();
+        Clock clock = Clock.fixed(Instant.parse("2026-03-19T10:00:00Z"), ZoneOffset.UTC);
         servicoPublico = new CadastroContaInternaServico(
                 cadastroContaRepositorio,
+                recuperacaoSenhaRepositorio,
                 clienteContextoPessoaPerfil,
                 clienteAdministracaoCadastroKeycloak,
                 pessoaRepositorio,
@@ -160,7 +178,172 @@ class CadastroContaInternaServicoTest {
                 canalEnvioCodigoCadastroTelefone,
                 canalNotificacaoTentativaCadastroEmail,
                 dispositivoProperties,
-                clock
+                clock,
+                null,
+                auditoriaService
+        );
+        return servicoPublico;
+    }
+
+    private DispositivoProperties criarDispositivoProperties() {
+        DispositivoProperties dispositivoProperties = new DispositivoProperties();
+        dispositivoProperties.getCodigo().setSegredoHmac("test-code-secret");
+        dispositivoProperties.getCodigo().setTamanho(6);
+        dispositivoProperties.getCodigo().setTentativasMaximas(5);
+        dispositivoProperties.getCodigo().setReenviosMaximos(3);
+        dispositivoProperties.getCodigo().setExpiracaoHoras(9);
+        return dispositivoProperties;
+    }
+
+    @Test
+    @DisplayName("deve persistir locale, timeZone e contexto de exibicao no cadastro publico")
+    void devePersistirContextoInformadoNoCadastroPublico() {
+        when(cadastroContaRepositorio.findByEmailPrincipal("ana@eickrono.com")).thenReturn(Optional.empty());
+        when(cadastroContaRepositorio.findByUsuarioIgnoreCase("ana.souza")).thenReturn(Optional.empty());
+        when(clienteContextoPessoaPerfil.buscarPorEmail("ana@eickrono.com")).thenReturn(Optional.empty());
+        when(provisionadorPerfilDominioServico.usuarioDisponivel("ana.souza")).thenReturn(true);
+        when(clienteAdministracaoCadastroKeycloak.criarUsuarioPendente(
+                "Ana Souza", "ana@eickrono.com", "SenhaForte@123"))
+                .thenReturn(new CadastroKeycloakProvisionado("sub-ana", "ana@eickrono.com", "Ana Souza"));
+        when(cadastroContaRepositorio.save(any(CadastroConta.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        servicoPublico().cadastrarPublico(
+                TipoPessoaCadastro.FISICA,
+                "Ana Souza",
+                null,
+                "ana.souza",
+                null,
+                null,
+                null,
+                "ana@eickrono.com",
+                "+5511999999999",
+                CanalValidacaoTelefoneCadastro.SMS,
+                "SenhaForte@123",
+                (VinculoSocialPendenteCadastro) null,
+                (ConviteOrganizacionalValidado) null,
+                "app-flutter-publico",
+                "127.0.0.1",
+                "JUnit",
+                new ContextoSolicitacaoFluxoPublico(
+                        "pt-BR",
+                        "America/Sao_Paulo",
+                        "app",
+                        "Thimisu",
+                        "ios",
+                        "Eickrono",
+                        "HML"
+                )
+        );
+
+        verify(cadastroContaRepositorio).save(cadastroCaptor.capture());
+        assertThat(cadastroCaptor.getValue().getLocaleSolicitante()).isEqualTo("pt-BR");
+        assertThat(cadastroCaptor.getValue().getTimeZoneSolicitante()).isEqualTo("America/Sao_Paulo");
+        assertThat(cadastroCaptor.getValue().getTipoProdutoExibicao()).isEqualTo("app");
+        assertThat(cadastroCaptor.getValue().getProdutoExibicao()).isEqualTo("Thimisu");
+        assertThat(cadastroCaptor.getValue().getCanalExibicao()).isEqualTo("ios");
+        assertThat(cadastroCaptor.getValue().getEmpresaExibicao()).isEqualTo("Eickrono");
+        assertThat(cadastroCaptor.getValue().getAmbienteExibicao()).isEqualTo("HML");
+    }
+
+    @Test
+    @DisplayName("deve tratar telefone como nao obrigatorio quando o projeto nao exigir validacao")
+    void deveLiberarCadastroPublicoAoConfirmarEmailQuandoProjetoNaoExigeTelefone() {
+        DispositivoProperties propriedadesDispositivo = new DispositivoProperties();
+        propriedadesDispositivo.getCodigo().setSegredoHmac("test-code-secret");
+        propriedadesDispositivo.getCodigo().setTamanho(6);
+        propriedadesDispositivo.getCodigo().setTentativasMaximas(5);
+        propriedadesDispositivo.getCodigo().setReenviosMaximos(3);
+        propriedadesDispositivo.getCodigo().setExpiracaoHoras(9);
+        Clock relogioFixo = Clock.fixed(Instant.parse("2026-03-19T10:00:00Z"), ZoneOffset.UTC);
+
+        CadastroContaInternaServico servicoProjetoSemTelefone = new CadastroContaInternaServico(
+                cadastroContaRepositorio,
+                clienteContextoPessoaPerfil,
+                clienteAdministracaoCadastroKeycloak,
+                pessoaRepositorio,
+                perfilIdentidadeRepositorio,
+                formaAcessoRepositorio,
+                vinculoSocialRepositorio,
+                conviteOrganizacionalRepositorio,
+                vinculoOrganizacionalRepositorio,
+                provisionadorPerfilDominioServico,
+                canalEnvioCodigoCadastroEmail,
+                canalEnvioCodigoCadastroTelefone,
+                canalNotificacaoTentativaCadastroEmail,
+                propriedadesDispositivo,
+                relogioFixo,
+                null,
+                auditoriaService,
+                new ResolvedorContextoFluxoPublico(cadastroContaRepositorio, recuperacaoSenhaRepositorio),
+                aplicacaoId -> new ProjetoFluxoPublicoResolvido(
+                        42L,
+                        aplicacaoId,
+                        "Thimisu",
+                        "app",
+                        "Thimisu",
+                        "mobile",
+                        false
+                )
+        );
+
+        AtomicReference<CadastroConta> salvo = new AtomicReference<>();
+        when(cadastroContaRepositorio.findByEmailPrincipal("ana@eickrono.com")).thenReturn(Optional.empty());
+        when(cadastroContaRepositorio.findByUsuarioIgnoreCase("ana.souza")).thenReturn(Optional.empty());
+        when(clienteContextoPessoaPerfil.buscarPorEmail("ana@eickrono.com")).thenReturn(Optional.empty());
+        when(provisionadorPerfilDominioServico.usuarioDisponivel("ana.souza")).thenReturn(true);
+        when(clienteAdministracaoCadastroKeycloak.criarUsuarioPendente(
+                "Ana Souza", "ana@eickrono.com", "SenhaForte@123"))
+                .thenReturn(new CadastroKeycloakProvisionado("sub-ana", "ana@eickrono.com", "Ana Souza"));
+        when(cadastroContaRepositorio.save(any(CadastroConta.class))).thenAnswer(invocation -> {
+            CadastroConta cadastro = invocation.getArgument(0);
+            salvo.set(cadastro);
+            return cadastro;
+        });
+        when(provisionadorPerfilDominioServico.provisionarCadastroConfirmado(any(CadastroConta.class)))
+                .thenReturn(new com.eickrono.api.identidade.aplicacao.modelo.ProvisionamentoPerfilRealizado(
+                        10L,
+                        "usuario-001",
+                        "LIBERADO"
+                ));
+
+        CadastroInternoRealizado cadastro = servicoProjetoSemTelefone.cadastrarPublico(
+                TipoPessoaCadastro.FISICA,
+                "Ana Souza",
+                null,
+                "ana.souza",
+                null,
+                null,
+                null,
+                "ana@eickrono.com",
+                "+5511999999999",
+                CanalValidacaoTelefoneCadastro.SMS,
+                "SenhaForte@123",
+                "eickrono-thimisu-app",
+                "127.0.0.1",
+                "JUnit"
+        );
+        verify(canalEnvioCodigoCadastroEmail).enviar(any(CadastroConta.class), codigoCaptor.capture());
+        verify(canalEnvioCodigoCadastroTelefone, never()).enviar(any(CadastroConta.class), any());
+        when(cadastroContaRepositorio.findByCadastroId(cadastro.cadastroId())).thenReturn(Optional.of(salvo.get()));
+
+        ConfirmacaoEmailCadastroPublicoRealizada confirmacao = servicoProjetoSemTelefone.confirmarEmailPublico(
+                cadastro.cadastroId(),
+                codigoCaptor.getValue(),
+                null
+        );
+
+        assertThat(salvo.get().getClienteEcossistemaId()).isEqualTo(42L);
+        assertThat(salvo.get().getExigeValidacaoTelefoneSnapshot()).isFalse();
+        assertThat(salvo.get().getTelefonePrincipal()).isEqualTo("+5511999999999");
+        assertThat(confirmacao.emailConfirmado()).isTrue();
+        assertThat(confirmacao.telefoneObrigatorio()).isFalse();
+        assertThat(confirmacao.telefoneConfirmado()).isFalse();
+        assertThat(confirmacao.podeAutenticar()).isTrue();
+        assertThat(confirmacao.proximoPasso()).isEqualTo("LOGIN");
+        verify(clienteAdministracaoCadastroKeycloak).confirmarEmailEAtivarUsuario(
+                eq("sub-ana"),
+                eq("Ana Souza"),
+                isNull()
         );
     }
 
@@ -175,7 +358,7 @@ class CadastroContaInternaServicoTest {
                 .thenReturn(new CadastroKeycloakProvisionado("sub-ana", "ana@eickrono.com", "Ana Souza"));
         when(cadastroContaRepositorio.save(any(CadastroConta.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        CadastroInternoRealizado resultado = servico.cadastrar(
+        CadastroInternoRealizado resultado = servico().cadastrar(
                 "Ana Souza",
                 "ana@eickrono.com",
                 "+5511999999999",
@@ -209,6 +392,103 @@ class CadastroContaInternaServicoTest {
     }
 
     @Test
+    @DisplayName("deve traduzir falha de SMTP do cadastro publico para codigo estruturado")
+    void deveTraduzirFalhaSmtpDoCadastroPublico() {
+        when(cadastroContaRepositorio.findByEmailPrincipal("ana@eickrono.com")).thenReturn(Optional.empty());
+        when(cadastroContaRepositorio.findByUsuarioIgnoreCase("ana.souza")).thenReturn(Optional.empty());
+        when(clienteContextoPessoaPerfil.buscarPorEmail("ana@eickrono.com")).thenReturn(Optional.empty());
+        when(provisionadorPerfilDominioServico.usuarioDisponivel("ana.souza")).thenReturn(true);
+        when(clienteAdministracaoCadastroKeycloak.criarUsuarioPendente(
+                "Ana Souza", "ana@eickrono.com", "SenhaForte@123"))
+                .thenReturn(new CadastroKeycloakProvisionado("sub-ana", "ana@eickrono.com", "Ana Souza"));
+        when(cadastroContaRepositorio.save(any(CadastroConta.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        doThrow(new com.eickrono.api.identidade.aplicacao.excecao.EntregaEmailException(
+                "cadastro_email_indisponivel",
+                "Não foi possível enviar o código de confirmação por e-mail agora. Tente novamente.",
+                "Falha ao enviar o codigo de confirmacao do cadastro por SMTP.",
+                new IllegalStateException("smtp")
+        )).when(canalEnvioCodigoCadastroEmail).enviar(any(CadastroConta.class), any(String.class));
+
+        assertThatThrownBy(() -> servicoPublico().cadastrarPublico(
+                TipoPessoaCadastro.FISICA,
+                "Ana Souza",
+                null,
+                "ana.souza",
+                null,
+                null,
+                null,
+                "ana@eickrono.com",
+                "+5511999999999",
+                CanalValidacaoTelefoneCadastro.SMS,
+                "SenhaForte@123",
+                "eickrono-thimisu-app",
+                "127.0.0.1",
+                "JUnit"
+        ))
+                .isInstanceOf(FluxoPublicoException.class)
+                .satisfies(erro -> {
+                    FluxoPublicoException excecao = (FluxoPublicoException) erro;
+                    assertThat(excecao.getStatus()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+                    assertThat(excecao.getCodigo()).isEqualTo("cadastro_email_indisponivel");
+                    assertThat(excecao.getMessage()).isEqualTo(
+                            "Não foi possível enviar o código de confirmação por e-mail agora. Tente novamente."
+                    );
+                });
+
+        verify(auditoriaService).registrarEvento(
+                eq("CADASTRO_EMAIL_FALHA"),
+                eq("sub-ana"),
+                contains("codigo=cadastro_email_indisponivel")
+        );
+        verify(clienteAdministracaoCadastroKeycloak).removerUsuarioPendente("sub-ana");
+        verify(cadastroContaRepositorio).delete(any(CadastroConta.class));
+    }
+
+    @Test
+    @DisplayName("deve traduzir conflito de e-mail do Keycloak para codigo estruturado no cadastro publico")
+    void deveTraduzirConflitoEmailDoKeycloakNoCadastroPublico() {
+        when(cadastroContaRepositorio.findByEmailPrincipal("ana@eickrono.com")).thenReturn(Optional.empty());
+        when(cadastroContaRepositorio.findByUsuarioIgnoreCase("ana.souza")).thenReturn(Optional.empty());
+        when(clienteContextoPessoaPerfil.buscarPorEmail("ana@eickrono.com")).thenReturn(Optional.empty());
+        when(provisionadorPerfilDominioServico.usuarioDisponivel("ana.souza")).thenReturn(true);
+        when(clienteAdministracaoCadastroKeycloak.criarUsuarioPendente(
+                "Ana Souza", "ana@eickrono.com", "SenhaForte@123"))
+                .thenThrow(new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "Já existe um usuário de autenticação com o e-mail informado."
+                ));
+
+        assertThatThrownBy(() -> servicoPublico().cadastrarPublico(
+                TipoPessoaCadastro.FISICA,
+                "Ana Souza",
+                null,
+                "ana.souza",
+                null,
+                null,
+                null,
+                "ana@eickrono.com",
+                "+5511999999999",
+                CanalValidacaoTelefoneCadastro.SMS,
+                "SenhaForte@123",
+                "eickrono-thimisu-app",
+                "127.0.0.1",
+                "JUnit"
+        ))
+                .isInstanceOf(FluxoPublicoException.class)
+                .satisfies(erro -> {
+                    FluxoPublicoException excecao = (FluxoPublicoException) erro;
+                    assertThat(excecao.getStatus()).isEqualTo(HttpStatus.CONFLICT);
+                    assertThat(excecao.getCodigo()).isEqualTo("email_indisponivel");
+                    assertThat(excecao.getMessage()).isEqualTo(
+                            "Já existe uma conta com o e-mail informado. Entre ou recupere a senha."
+                    );
+                });
+
+        verify(cadastroContaRepositorio, never()).save(any(CadastroConta.class));
+        verify(canalEnvioCodigoCadastroEmail, never()).enviar(any(CadastroConta.class), any(String.class));
+    }
+
+    @Test
     @DisplayName("deve confirmar o e-mail do cadastro pendente e liberar autenticação")
     void deveConfirmarEmailDoCadastro() {
         AtomicReference<CadastroConta> salvo = new AtomicReference<>();
@@ -224,7 +504,7 @@ class CadastroContaInternaServicoTest {
             return cadastro;
         });
 
-        CadastroInternoRealizado cadastro = servico.cadastrar(
+        CadastroInternoRealizado cadastro = servico().cadastrar(
                 "Ana Souza",
                 "ana@eickrono.com",
                 "+5511999999999",
@@ -237,7 +517,7 @@ class CadastroContaInternaServicoTest {
         verify(canalEnvioCodigoCadastroEmail).enviar(any(CadastroConta.class), codigoCaptor.capture());
         when(cadastroContaRepositorio.findByCadastroId(cadastro.cadastroId())).thenReturn(Optional.of(salvo.get()));
 
-        ConfirmacaoEmailCadastroInternoRealizada confirmacao = servico.confirmarEmail(
+        ConfirmacaoEmailCadastroInternoRealizada confirmacao = servico().confirmarEmail(
                 cadastro.cadastroId(),
                 codigoCaptor.getValue()
         );
@@ -273,7 +553,7 @@ class CadastroContaInternaServicoTest {
             return cadastro;
         });
 
-        CadastroInternoRealizado cadastro = servico.cadastrar(
+        CadastroInternoRealizado cadastro = servico().cadastrar(
                 "Ana Souza",
                 "ana@eickrono.com",
                 "+5511999999999",
@@ -286,11 +566,12 @@ class CadastroContaInternaServicoTest {
         String hashAnterior = salvo.get().getCodigoEmailHash();
         when(cadastroContaRepositorio.findByCadastroId(cadastro.cadastroId())).thenReturn(Optional.of(salvo.get()));
 
-        servico.reenviarCodigoEmail(cadastro.cadastroId());
+        servico().reenviarCodigoEmail(cadastro.cadastroId());
 
         assertThat(salvo.get().getReenviosEmail()).isEqualTo(1);
         assertThat(salvo.get().getCodigoEmailHash()).isNotEqualTo(hashAnterior);
         verify(canalEnvioCodigoCadastroEmail, times(2)).enviar(any(CadastroConta.class), codigoCaptor.capture());
+        verify(canalEnvioCodigoCadastroTelefone, times(1)).enviar(any(CadastroConta.class), any());
         assertThat(codigoCaptor.getAllValues()).hasSize(2);
         assertThat(codigoCaptor.getAllValues().get(0)).matches("\\d{6}");
         assertThat(codigoCaptor.getAllValues().get(1)).matches("\\d{6}");
@@ -298,7 +579,7 @@ class CadastroContaInternaServicoTest {
     }
 
     @Test
-    @DisplayName("deve exigir o codigo de telefone quando o cadastro publico possuir telefone principal")
+    @DisplayName("deve manter o cadastro pendente de telefone quando confirmar apenas o e-mail")
     void deveExigirCodigoTelefoneNaConfirmacaoDoCadastroPublico() {
         AtomicReference<CadastroConta> salvo = new AtomicReference<>();
         when(cadastroContaRepositorio.findByUsuarioIgnoreCase("ana.souza")).thenReturn(Optional.empty());
@@ -314,7 +595,7 @@ class CadastroContaInternaServicoTest {
             return cadastro;
         });
 
-        CadastroInternoRealizado cadastro = servicoPublico.cadastrarPublico(
+        CadastroInternoRealizado cadastro = servicoPublico().cadastrarPublico(
                 TipoPessoaCadastro.FISICA,
                 "Ana Souza",
                 null,
@@ -333,15 +614,17 @@ class CadastroContaInternaServicoTest {
         verify(canalEnvioCodigoCadastroEmail).enviar(any(CadastroConta.class), codigoCaptor.capture());
         when(cadastroContaRepositorio.findByCadastroId(cadastro.cadastroId())).thenReturn(Optional.of(salvo.get()));
 
-        assertThatThrownBy(() -> servicoPublico.confirmarEmailPublico(
+        ConfirmacaoEmailCadastroPublicoRealizada confirmacao = servicoPublico().confirmarEmailPublico(
                 cadastro.cadastroId(),
                 codigoCaptor.getValue(),
                 null
-        ))
-                .isInstanceOfSatisfying(ResponseStatusException.class, erro -> {
-                    assertThat(erro.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-                    assertThat(erro.getReason()).contains("telefone");
-                });
+        );
+
+        assertThat(confirmacao.emailConfirmado()).isTrue();
+        assertThat(confirmacao.telefoneConfirmado()).isFalse();
+        assertThat(confirmacao.telefoneObrigatorio()).isTrue();
+        assertThat(confirmacao.podeAutenticar()).isFalse();
+        assertThat(confirmacao.proximoPasso()).isEqualTo("VALIDAR_TELEFONE");
     }
 
     @Test
@@ -361,7 +644,7 @@ class CadastroContaInternaServicoTest {
             return cadastro;
         });
 
-        CadastroInternoRealizado cadastro = servicoPublico.cadastrarPublico(
+        CadastroInternoRealizado cadastro = servicoPublico().cadastrarPublico(
                 TipoPessoaCadastro.FISICA,
                 "Ana Souza",
                 null,
@@ -379,15 +662,15 @@ class CadastroContaInternaServicoTest {
         );
         when(cadastroContaRepositorio.findByCadastroId(cadastro.cadastroId())).thenReturn(Optional.of(salvo.get()));
 
-        servicoPublico.reenviarCodigoEmail(cadastro.cadastroId());
+        servicoPublico().reenviarCodigoEmail(cadastro.cadastroId());
 
         verify(canalEnvioCodigoCadastroEmail, times(2)).enviar(any(CadastroConta.class), any());
-        verify(canalEnvioCodigoCadastroTelefone, times(2)).enviar(any(CadastroConta.class), any());
+        verify(canalEnvioCodigoCadastroTelefone, times(1)).enviar(any(CadastroConta.class), any());
     }
 
     @Test
-    @DisplayName("deve confirmar cadastro publico somente quando e-mail e telefone forem validados")
-    void deveConfirmarCadastroPublicoComEmailETelefone() {
+    @DisplayName("deve manter o cadastro em validacao de telefone depois de confirmar apenas o e-mail")
+    void deveManterCadastroPendenteTelefoneDepoisDeConfirmarEmail() {
         AtomicReference<CadastroConta> salvo = new AtomicReference<>();
         when(cadastroContaRepositorio.findByUsuarioIgnoreCase("ana.souza")).thenReturn(Optional.empty());
         when(provisionadorPerfilDominioServico.usuarioDisponivel("ana.souza")).thenReturn(true);
@@ -401,14 +684,7 @@ class CadastroContaInternaServicoTest {
             salvo.set(cadastro);
             return cadastro;
         });
-        when(provisionadorPerfilDominioServico.provisionarCadastroConfirmado(any(CadastroConta.class)))
-                .thenReturn(new com.eickrono.api.identidade.aplicacao.modelo.ProvisionamentoPerfilRealizado(
-                        10L,
-                        "usuario-001",
-                        "LIBERADO"
-                ));
-
-        CadastroInternoRealizado cadastro = servicoPublico.cadastrarPublico(
+        CadastroInternoRealizado cadastro = servicoPublico().cadastrarPublico(
                 TipoPessoaCadastro.FISICA,
                 "Ana Souza",
                 null,
@@ -430,15 +706,86 @@ class CadastroContaInternaServicoTest {
         verify(canalEnvioCodigoCadastroTelefone).enviar(any(CadastroConta.class), codigoTelefoneCaptor.capture());
         when(cadastroContaRepositorio.findByCadastroId(cadastro.cadastroId())).thenReturn(Optional.of(salvo.get()));
 
-        ConfirmacaoEmailCadastroPublicoRealizada confirmacao = servicoPublico.confirmarEmailPublico(
+        ConfirmacaoEmailCadastroPublicoRealizada confirmacao = servicoPublico().confirmarEmailPublico(
                 cadastro.cadastroId(),
                 codigoEmailCaptor.getValue(),
+                null
+        );
+
+        assertThat(confirmacao.emailConfirmado()).isTrue();
+        assertThat(confirmacao.telefoneConfirmado()).isFalse();
+        assertThat(confirmacao.telefoneObrigatorio()).isTrue();
+        assertThat(confirmacao.podeAutenticar()).isFalse();
+        assertThat(confirmacao.proximoPasso()).isEqualTo("VALIDAR_TELEFONE");
+        assertThat(salvo.get().emailJaConfirmado()).isTrue();
+        assertThat(salvo.get().telefoneJaConfirmado()).isFalse();
+        verify(clienteAdministracaoCadastroKeycloak, never()).confirmarEmailEAtivarUsuario(
+                anyString(),
+                anyString(),
+                any()
+        );
+    }
+
+    @Test
+    @DisplayName("deve confirmar cadastro publico por telefone depois do e-mail ja confirmado")
+    void deveConfirmarCadastroPublicoComTelefoneAposEmail() {
+        AtomicReference<CadastroConta> salvo = new AtomicReference<>();
+        when(cadastroContaRepositorio.findByUsuarioIgnoreCase("ana.souza")).thenReturn(Optional.empty());
+        when(provisionadorPerfilDominioServico.usuarioDisponivel("ana.souza")).thenReturn(true);
+        when(cadastroContaRepositorio.findByEmailPrincipal("ana@eickrono.com")).thenReturn(Optional.empty());
+        when(clienteContextoPessoaPerfil.buscarPorEmail("ana@eickrono.com")).thenReturn(Optional.empty());
+        when(clienteAdministracaoCadastroKeycloak.criarUsuarioPendente(
+                "Ana Souza", "ana@eickrono.com", "SenhaForte@123"))
+                .thenReturn(new CadastroKeycloakProvisionado("sub-ana", "ana@eickrono.com", "Ana Souza"));
+        when(cadastroContaRepositorio.save(any(CadastroConta.class))).thenAnswer(invocation -> {
+            CadastroConta cadastro = invocation.getArgument(0);
+            salvo.set(cadastro);
+            return cadastro;
+        });
+        when(provisionadorPerfilDominioServico.provisionarCadastroConfirmado(any(CadastroConta.class)))
+                .thenReturn(new com.eickrono.api.identidade.aplicacao.modelo.ProvisionamentoPerfilRealizado(
+                        10L,
+                        "usuario-001",
+                        "LIBERADO"
+                ));
+
+        CadastroInternoRealizado cadastro = servicoPublico().cadastrarPublico(
+                TipoPessoaCadastro.FISICA,
+                "Ana Souza",
+                null,
+                "ana.souza",
+                null,
+                null,
+                null,
+                "ana@eickrono.com",
+                "+5511999999999",
+                CanalValidacaoTelefoneCadastro.SMS,
+                "SenhaForte@123",
+                "app-flutter-publico",
+                "127.0.0.1",
+                "JUnit"
+        );
+        ArgumentCaptor<String> codigoEmailCaptor = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<String> codigoTelefoneCaptor = ArgumentCaptor.forClass(String.class);
+        verify(canalEnvioCodigoCadastroEmail).enviar(any(CadastroConta.class), codigoEmailCaptor.capture());
+        verify(canalEnvioCodigoCadastroTelefone).enviar(any(CadastroConta.class), codigoTelefoneCaptor.capture());
+        when(cadastroContaRepositorio.findByCadastroId(cadastro.cadastroId())).thenReturn(Optional.of(salvo.get()));
+
+        servicoPublico().confirmarEmailPublico(
+                cadastro.cadastroId(),
+                codigoEmailCaptor.getValue(),
+                null
+        );
+
+        ConfirmacaoEmailCadastroPublicoRealizada confirmacao = servicoPublico().confirmarTelefonePublico(
+                cadastro.cadastroId(),
                 codigoTelefoneCaptor.getValue()
         );
 
         assertThat(confirmacao.emailConfirmado()).isTrue();
+        assertThat(confirmacao.telefoneConfirmado()).isTrue();
         assertThat(confirmacao.podeAutenticar()).isTrue();
-        assertThat(salvo.get().emailJaConfirmado()).isTrue();
+        assertThat(confirmacao.proximoPasso()).isEqualTo("LOGIN");
         assertThat(salvo.get().telefoneJaConfirmado()).isTrue();
         verify(clienteAdministracaoCadastroKeycloak).confirmarEmailEAtivarUsuario(
                 eq("sub-ana"),
@@ -453,7 +800,7 @@ class CadastroContaInternaServicoTest {
         when(cadastroContaRepositorio.findByUsuarioIgnoreCase("ana.souza")).thenReturn(Optional.empty());
         when(provisionadorPerfilDominioServico.usuarioDisponivel("ana.souza")).thenReturn(false);
 
-        assertThatThrownBy(() -> servicoPublico.cadastrarPublico(
+        assertThatThrownBy(() -> servicoPublico().cadastrarPublico(
                 TipoPessoaCadastro.FISICA,
                 "Ana Souza",
                 null,
@@ -482,14 +829,14 @@ class CadastroContaInternaServicoTest {
         when(cadastroContaRepositorio.findByUsuarioIgnoreCase("ana.souza")).thenReturn(Optional.empty());
         when(provisionadorPerfilDominioServico.usuarioDisponivel("ana.souza")).thenReturn(true);
 
-        boolean disponivel = servicoPublico.usuarioDisponivelPublico(" Ana.Souza ");
+        boolean disponivel = servicoPublico().usuarioDisponivelPublico(" Ana.Souza ");
 
         assertThat(disponivel).isTrue();
         verify(provisionadorPerfilDominioServico).usuarioDisponivel("ana.souza");
     }
 
     @Test
-    @DisplayName("deve responder genericamente e avisar por e-mail quando já existir conta ativa para o e-mail")
+    @DisplayName("deve responder com erro estruturado e avisar por e-mail quando já existir conta ativa para o e-mail")
     void deveAvisarPorEmailQuandoJaExistirContaAtivaNoEndereco() {
         when(cadastroContaRepositorio.findByUsuarioIgnoreCase("ana.souza")).thenReturn(Optional.empty());
         when(provisionadorPerfilDominioServico.usuarioDisponivel("ana.souza")).thenReturn(true);
@@ -504,7 +851,7 @@ class CadastroContaInternaServicoTest {
                         "LIBERADO"
                 )));
 
-        assertThatThrownBy(() -> servicoPublico.cadastrarPublico(
+        assertThatThrownBy(() -> servicoPublico().cadastrarPublico(
                 TipoPessoaCadastro.FISICA,
                 "Ana Souza",
                 null,
@@ -521,7 +868,14 @@ class CadastroContaInternaServicoTest {
                 "JUnit"
         ))
                 .isInstanceOf(FluxoPublicoException.class)
-                .hasMessage("Não foi possível concluir o cadastro com os dados informados.");
+                .satisfies(erro -> {
+                    FluxoPublicoException excecao = (FluxoPublicoException) erro;
+                    assertThat(excecao.getStatus()).isEqualTo(HttpStatus.CONFLICT);
+                    assertThat(excecao.getCodigo()).isEqualTo("email_indisponivel");
+                    assertThat(excecao.getMessage()).isEqualTo(
+                            "Já existe uma conta com o e-mail informado. Entre ou recupere a senha."
+                    );
+                });
 
         verify(canalNotificacaoTentativaCadastroEmail).notificar("ana@eickrono.com");
         verify(clienteAdministracaoCadastroKeycloak, never()).criarUsuarioPendente(any(), any(), any());
@@ -544,7 +898,7 @@ class CadastroContaInternaServicoTest {
             return cadastro;
         });
 
-        CadastroInternoRealizado cadastro = servicoPublico.cadastrarPublico(
+        CadastroInternoRealizado cadastro = servicoPublico().cadastrarPublico(
                 TipoPessoaCadastro.FISICA,
                 "Ana Souza",
                 null,
@@ -562,7 +916,7 @@ class CadastroContaInternaServicoTest {
         );
         when(cadastroContaRepositorio.findByCadastroId(cadastro.cadastroId())).thenReturn(Optional.of(salvo.get()));
 
-        servicoPublico.cancelarCadastroPendentePublico(cadastro.cadastroId());
+        servicoPublico().cancelarCadastroPendentePublico(cadastro.cadastroId());
 
         verify(clienteAdministracaoCadastroKeycloak).removerUsuarioPendente("sub-ana");
         verify(cadastroContaRepositorio).delete(salvo.get());
@@ -580,7 +934,7 @@ class CadastroContaInternaServicoTest {
                 .thenReturn(new CadastroKeycloakProvisionado("sub-ana", "ana@eickrono.com", "Ana Souza"));
         when(cadastroContaRepositorio.save(any(CadastroConta.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        servicoPublico.cadastrarPublico(
+        servicoPublico().cadastrarPublico(
                 TipoPessoaCadastro.FISICA,
                 "Ana Souza",
                 null,
@@ -621,7 +975,7 @@ class CadastroContaInternaServicoTest {
                 .thenReturn(new CadastroKeycloakProvisionado("sub-jane", "convite@acme.test", "Jane Doe"));
         when(cadastroContaRepositorio.save(any(CadastroConta.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        servicoPublico.cadastrarPublico(
+        servicoPublico().cadastrarPublico(
                 TipoPessoaCadastro.FISICA,
                 "Jane Doe",
                 null,
@@ -698,7 +1052,7 @@ class CadastroContaInternaServicoTest {
                         "LIBERADO"
                 ));
 
-        CadastroInternoRealizado cadastro = servicoPublico.cadastrarPublico(
+        CadastroInternoRealizado cadastro = servicoPublico().cadastrarPublico(
                 TipoPessoaCadastro.FISICA,
                 "Jane Doe",
                 null,
@@ -731,7 +1085,7 @@ class CadastroContaInternaServicoTest {
         verify(canalEnvioCodigoCadastroTelefone).enviar(any(CadastroConta.class), codigoTelefoneCaptor.capture());
         when(cadastroContaRepositorio.findByCadastroId(cadastro.cadastroId())).thenReturn(Optional.of(salvo.get()));
 
-        servicoPublico.confirmarEmailPublico(
+        servicoPublico().confirmarEmailPublico(
                 cadastro.cadastroId(),
                 codigoEmailCaptor.getValue(),
                 codigoTelefoneCaptor.getValue()
@@ -791,7 +1145,7 @@ class CadastroContaInternaServicoTest {
                         "LIBERADO"
                 ));
 
-        CadastroInternoRealizado cadastro = servicoPublico.cadastrarPublico(
+        CadastroInternoRealizado cadastro = servicoPublico().cadastrarPublico(
                 TipoPessoaCadastro.FISICA,
                 "Ana Souza",
                 null,
@@ -818,7 +1172,7 @@ class CadastroContaInternaServicoTest {
         verify(canalEnvioCodigoCadastroTelefone).enviar(any(CadastroConta.class), codigoTelefoneCaptor.capture());
         when(cadastroContaRepositorio.findByCadastroId(cadastro.cadastroId())).thenReturn(Optional.of(salvo.get()));
 
-        servicoPublico.confirmarEmailPublico(
+        servicoPublico().confirmarEmailPublico(
                 cadastro.cadastroId(),
                 codigoEmailCaptor.getValue(),
                 codigoTelefoneCaptor.getValue()
@@ -870,12 +1224,11 @@ class CadastroContaInternaServicoTest {
                 OffsetDateTime.parse("2026-03-16T09:00:00Z")
         );
         assertThat(expirado.getStatus()).isEqualTo(StatusCadastroConta.PENDENTE_EMAIL);
-        when(cadastroContaRepositorio.findByStatusAndCriadoEmBefore(
-                eq(StatusCadastroConta.PENDENTE_EMAIL),
+        when(cadastroContaRepositorio.findByCriadoEmBefore(
                 eq(OffsetDateTime.parse("2026-03-17T10:00:00Z"))))
                 .thenReturn(List.of(expirado));
 
-        int removidos = servicoPublico.expurgarCadastrosPendentesExpirados();
+        int removidos = servicoPublico().expurgarCadastrosPendentesExpirados();
 
         assertThat(removidos).isEqualTo(1);
         verify(clienteAdministracaoCadastroKeycloak).removerUsuarioPendente("sub-expirado");
