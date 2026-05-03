@@ -25,7 +25,7 @@ public class VinculoOrganizacional {
     private Long pessoaIdPerfil;
 
     @Column(name = "usuario_id_perfil", nullable = false, length = 64)
-    private String usuarioIdPerfil;
+    private String perfilSistemaId;
 
     @Column(name = "organizacao_id", nullable = false, length = 128)
     private String organizacaoId;
@@ -53,7 +53,7 @@ public class VinculoOrganizacional {
 
     public VinculoOrganizacional(final UUID cadastroId,
                                  final Long pessoaIdPerfil,
-                                 final String usuarioIdPerfil,
+                                 final String perfilSistemaId,
                                  final String organizacaoId,
                                  final String nomeOrganizacao,
                                  final String conviteCodigo,
@@ -62,7 +62,7 @@ public class VinculoOrganizacional {
                                  final OffsetDateTime criadoEm) {
         this.cadastroId = Objects.requireNonNull(cadastroId, "cadastroId é obrigatório");
         this.pessoaIdPerfil = Objects.requireNonNull(pessoaIdPerfil, "pessoaIdPerfil é obrigatório");
-        this.usuarioIdPerfil = Objects.requireNonNull(usuarioIdPerfil, "usuarioIdPerfil é obrigatório");
+        this.perfilSistemaId = Objects.requireNonNull(perfilSistemaId, "perfilSistemaId é obrigatório");
         this.organizacaoId = Objects.requireNonNull(organizacaoId, "organizacaoId é obrigatório");
         this.nomeOrganizacao = Objects.requireNonNull(nomeOrganizacao, "nomeOrganizacao é obrigatório");
         this.conviteCodigo = Objects.requireNonNull(conviteCodigo, "conviteCodigo é obrigatório");
@@ -80,8 +80,8 @@ public class VinculoOrganizacional {
         return pessoaIdPerfil;
     }
 
-    public String getUsuarioIdPerfil() {
-        return usuarioIdPerfil;
+    public String getPerfilSistemaId() {
+        return perfilSistemaId;
     }
 
     public String getOrganizacaoId() {

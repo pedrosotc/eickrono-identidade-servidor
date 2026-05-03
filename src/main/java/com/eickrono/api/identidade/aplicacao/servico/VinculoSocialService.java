@@ -571,6 +571,7 @@ public class VinculoSocialService {
                 .map(provedor -> {
                     VinculoSocial vinculo = vinculosPorProvedor.get(provedor);
                     FormaAcesso forma = formasPorProvedor.get(provedor);
+                    DiagnosticoAvatarSocial diagnosticoAvatar = diagnosticarAvatarSocial(provedor, vinculo, forma);
                     return new VinculoSocialDto(
                             provedor.getAliasApi(),
                             true,
@@ -582,10 +583,40 @@ public class VinculoSocialService {
                             forma == null ? null : forma.getAvatarExternoAtualizadoEm(),
                             provedor.getAliasFormaAcesso().equalsIgnoreCase(
                                     Objects.requireNonNullElse(preferencia.provedorSocial(), ""))
+                                    ,
+                            diagnosticoAvatar.status(),
+                            diagnosticoAvatar.mensagem()
                     );
                 })
                 .toList();
         return new VinculosSociaisDto(provedores, preferencia.origem(), preferencia.url());
+    }
+
+    private DiagnosticoAvatarSocial diagnosticarAvatarSocial(final ProvedorVinculoSocial provedor,
+                                                             final VinculoSocial vinculo,
+                                                             final FormaAcesso forma) {
+        if (vinculo == null) {
+            return DiagnosticoAvatarSocial.vazio();
+        }
+        if (!provedor.suportaAvatarPerfil()) {
+            return new DiagnosticoAvatarSocial(
+                    "PROVEDOR_SEM_SUPORTE_DE_FOTO",
+                    "Esta conta esta vinculada, mas este provedor nao disponibiliza foto para uso no perfil neste aplicativo."
+            );
+        }
+        if (forma != null && forma.getUrlAvatarExterno() != null && !forma.getUrlAvatarExterno().isBlank()) {
+            return new DiagnosticoAvatarSocial("FOTO_DISPONIVEL", null);
+        }
+        if (forma != null && forma.getAvatarExternoAtualizadoEm() != null) {
+            return new DiagnosticoAvatarSocial(
+                    "FOTO_REMOVIDA_APOS_SINCRONIZACAO",
+                    "A foto desta rede social nao esta mais disponivel. Por isso ela deixou de poder ser usada como foto de perfil."
+            );
+        }
+        return new DiagnosticoAvatarSocial(
+                "FOTO_NAO_DISPONIVEL",
+                "Esta conta esta vinculada, mas nao ha foto disponivel para usar no perfil neste momento."
+        );
     }
 
     private ProvedorVinculoSocial validarProvedor(final String aliasProvedor) {
@@ -690,5 +721,11 @@ public class VinculoSocialService {
             }
         }
         return null;
+    }
+
+    private record DiagnosticoAvatarSocial(String status, String mensagem) {
+        private static DiagnosticoAvatarSocial vazio() {
+            return new DiagnosticoAvatarSocial(null, null);
+        }
     }
 }

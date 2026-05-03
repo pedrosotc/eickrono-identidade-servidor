@@ -8,20 +8,25 @@ import java.util.Optional;
  * Provedores sociais suportados pela API de identidade.
  */
 public enum ProvedorVinculoSocial {
-    GOOGLE(true, "google"),
-    APPLE(true, "apple"),
-    FACEBOOK(false, "facebook"),
-    LINKEDIN(true, "linkedin"),
-    INSTAGRAM(false, "instagram"),
-    X(false, "x");
+    GOOGLE(true, true, "google"),
+    APPLE(true, false, "apple"),
+    FACEBOOK(false, true, "facebook"),
+    LINKEDIN(true, true, "linkedin"),
+    INSTAGRAM(false, true, "instagram"),
+    X(false, true, "x");
 
     private final String aliasApi;
     private final boolean trustEmail;
+    private final boolean suportaAvatarPerfil;
     private final String[] aliasesAceitos;
 
-    ProvedorVinculoSocial(final boolean trustEmail, final String aliasApi, final String... aliasesAceitos) {
+    ProvedorVinculoSocial(final boolean trustEmail,
+                          final boolean suportaAvatarPerfil,
+                          final String aliasApi,
+                          final String... aliasesAceitos) {
         this.aliasApi = aliasApi;
         this.trustEmail = trustEmail;
+        this.suportaAvatarPerfil = suportaAvatarPerfil;
         this.aliasesAceitos = aliasesAceitos;
     }
 
@@ -35,6 +40,10 @@ public enum ProvedorVinculoSocial {
 
     public boolean confiaEmailDoProvedor() {
         return trustEmail;
+    }
+
+    public boolean suportaAvatarPerfil() {
+        return suportaAvatarPerfil;
     }
 
     public static Optional<ProvedorVinculoSocial> fromAlias(final String alias) {

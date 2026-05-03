@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.eickrono.api.identidade.aplicacao.modelo.ContextoPessoaPerfil;
+import com.eickrono.api.identidade.aplicacao.modelo.ContextoPessoaPerfilSistema;
 import com.eickrono.api.identidade.apresentacao.dto.VinculoOrganizacionalDto;
 import com.eickrono.api.identidade.apresentacao.dto.VinculosOrganizacionaisDto;
 import com.eickrono.api.identidade.dominio.modelo.VinculoOrganizacional;
@@ -28,7 +28,7 @@ class VinculoOrganizacionalServiceTest {
     private VinculoOrganizacionalRepositorio vinculoOrganizacionalRepositorio;
 
     @Mock
-    private ClienteContextoPessoaPerfil clienteContextoPessoaPerfil;
+    private ClienteContextoPessoaPerfilSistema clienteContextoPessoaPerfilSistema;
 
     @InjectMocks
     private VinculoOrganizacionalService vinculoOrganizacionalService;
@@ -37,8 +37,8 @@ class VinculoOrganizacionalServiceTest {
     @DisplayName("listar vínculos organizacionais: deve retornar os vínculos do usuário autenticado")
     void deveListarVinculosOrganizacionaisDoUsuarioAutenticado() {
         Jwt jwt = jwt("sub-123");
-        when(clienteContextoPessoaPerfil.buscarPorSub("sub-123"))
-                .thenReturn(Optional.of(new ContextoPessoaPerfil(
+        when(clienteContextoPessoaPerfilSistema.buscarPorSub("sub-123"))
+                .thenReturn(Optional.of(new ContextoPessoaPerfilSistema(
                         10L,
                         "sub-123",
                         "jane@empresa.test",
@@ -46,7 +46,7 @@ class VinculoOrganizacionalServiceTest {
                         "usuario-001",
                         "ATIVO"
                 )));
-        when(vinculoOrganizacionalRepositorio.findAllByUsuarioIdPerfilOrderByCriadoEmAsc("usuario-001"))
+        when(vinculoOrganizacionalRepositorio.findAllByPerfilSistemaIdOrderByCriadoEmAsc("usuario-001"))
                 .thenReturn(List.of(
                         new VinculoOrganizacional(
                                 UUID.fromString("11111111-1111-1111-1111-111111111111"),
@@ -104,13 +104,13 @@ class VinculoOrganizacionalServiceTest {
     @DisplayName("listar vínculos organizacionais: deve retornar vazio quando o contexto local ainda não existir")
     void deveRetornarVazioQuandoContextoLocalNaoExistir() {
         Jwt jwt = jwt("sub-inexistente");
-        when(clienteContextoPessoaPerfil.buscarPorSub("sub-inexistente"))
+        when(clienteContextoPessoaPerfilSistema.buscarPorSub("sub-inexistente"))
                 .thenReturn(Optional.empty());
 
         VinculosOrganizacionaisDto resposta = vinculoOrganizacionalService.listar(jwt);
 
         assertThat(resposta.vinculos()).isEmpty();
-        verify(clienteContextoPessoaPerfil).buscarPorSub("sub-inexistente");
+        verify(clienteContextoPessoaPerfilSistema).buscarPorSub("sub-inexistente");
     }
 
     private Jwt jwt(final String sub) {

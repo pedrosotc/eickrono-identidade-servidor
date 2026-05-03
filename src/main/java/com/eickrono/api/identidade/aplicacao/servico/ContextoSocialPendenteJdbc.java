@@ -37,8 +37,8 @@ public class ContextoSocialPendenteJdbc {
                                      final String nomeUsuarioExterno,
                                      final String nomeExibicaoExterno,
                                      final String urlAvatarExterno,
-                                     final UUID usuarioIdSugerido,
-                                     final String loginSugerido) {
+                                     final UUID perfilSistemaIdSugerido,
+                                     final String identificadorPublicoSistemaSugerido) {
         Objects.requireNonNull(projeto, "projeto é obrigatório");
         String provedorNormalizado = normalizarObrigatorio(provedor, "provedor");
         String identificadorNormalizado = normalizarObrigatorio(
@@ -47,8 +47,8 @@ public class ContextoSocialPendenteJdbc {
         String nomeUsuarioExternoNormalizado = normalizarOpcional(nomeUsuarioExterno);
         String nomeExibicaoExternoNormalizado = normalizarOpcional(nomeExibicaoExterno);
         String urlAvatarExternoNormalizado = normalizarOpcional(urlAvatarExterno);
-        String loginNormalizado = normalizarOpcional(loginSugerido);
-        String modoPendente = usuarioIdSugerido == null
+        String identificadorPublicoSistemaNormalizado = normalizarOpcional(identificadorPublicoSistemaSugerido);
+        String modoPendente = perfilSistemaIdSugerido == null
                 ? MODO_ABRIR_CADASTRO
                 : MODO_ENTRAR_E_VINCULAR;
 
@@ -67,8 +67,8 @@ public class ContextoSocialPendenteJdbc {
                            nome_usuario_externo = :nomeUsuarioExterno,
                            nome_exibicao_externo = :nomeExibicaoExterno,
                            url_avatar_externo = :urlAvatarExterno,
-                           usuario_id_sugerido = :usuarioIdSugerido,
-                           login_sugerido = :loginSugerido,
+                           usuario_id_sugerido = :perfilSistemaIdSugerido,
+                           login_sugerido = :identificadorPublicoSistemaSugerido,
                            modo_pendente = :modoPendente,
                            tentativas_falhas = 0,
                            tentativas_maximas = :tentativasMaximas,
@@ -87,8 +87,8 @@ public class ContextoSocialPendenteJdbc {
                     nomeUsuarioExternoNormalizado,
                     nomeExibicaoExternoNormalizado,
                     urlAvatarExternoNormalizado,
-                    usuarioIdSugerido,
-                    loginNormalizado,
+                    perfilSistemaIdSugerido,
+                    identificadorPublicoSistemaNormalizado,
                     modoPendente,
                     expiraEm,
                     agora
@@ -124,8 +124,8 @@ public class ContextoSocialPendenteJdbc {
                     :nomeUsuarioExterno,
                     :nomeExibicaoExterno,
                     :urlAvatarExterno,
-                    :usuarioIdSugerido,
-                    :loginSugerido,
+                    :perfilSistemaIdSugerido,
+                    :identificadorPublicoSistemaSugerido,
                     :modoPendente,
                     0,
                     :tentativasMaximas,
@@ -142,8 +142,8 @@ public class ContextoSocialPendenteJdbc {
                 nomeUsuarioExternoNormalizado,
                 nomeExibicaoExternoNormalizado,
                 urlAvatarExternoNormalizado,
-                usuarioIdSugerido,
-                loginNormalizado,
+                perfilSistemaIdSugerido,
+                identificadorPublicoSistemaNormalizado,
                 modoPendente,
                 expiraEm,
                 agora
@@ -241,14 +241,14 @@ public class ContextoSocialPendenteJdbc {
             return false;
         }
         ContextoSocialPendenteAtivo contexto = contextoOpt.orElseThrow();
-        if (contexto.usuarioIdSugerido() == null) {
+        if (contexto.perfilSistemaIdSugerido() == null) {
             return false;
         }
         Optional<UUID> usuarioIdAtual = localizarUsuarioProjetoPorEmail(
                 contexto.clienteEcossistemaId(),
                 emailAutenticado
         );
-        if (usuarioIdAtual.isEmpty() || !contexto.usuarioIdSugerido().equals(usuarioIdAtual.orElseThrow())) {
+        if (usuarioIdAtual.isEmpty() || !contexto.perfilSistemaIdSugerido().equals(usuarioIdAtual.orElseThrow())) {
             return false;
         }
         OffsetDateTime agora = OffsetDateTime.now(clock);
@@ -341,8 +341,8 @@ public class ContextoSocialPendenteJdbc {
                                                 final String nomeUsuarioExterno,
                                                 final String nomeExibicaoExterno,
                                                 final String urlAvatarExterno,
-                                                final UUID usuarioIdSugerido,
-                                                final String loginSugerido,
+                                                 final UUID perfilSistemaIdSugerido,
+                                                final String identificadorPublicoSistemaSugerido,
                                                  final String modoPendente,
                                                  final OffsetDateTime expiraEm,
                                                  final OffsetDateTime agora) {
@@ -355,8 +355,8 @@ public class ContextoSocialPendenteJdbc {
                 .addValue("nomeUsuarioExterno", nomeUsuarioExterno)
                 .addValue("nomeExibicaoExterno", nomeExibicaoExterno)
                 .addValue("urlAvatarExterno", urlAvatarExterno)
-                .addValue("usuarioIdSugerido", usuarioIdSugerido)
-                .addValue("loginSugerido", loginSugerido)
+                .addValue("perfilSistemaIdSugerido", perfilSistemaIdSugerido)
+                .addValue("identificadorPublicoSistemaSugerido", identificadorPublicoSistemaSugerido)
                 .addValue("modoPendente", modoPendente)
                 .addValue("tentativasMaximas", TENTATIVAS_MAXIMAS_PADRAO)
                 .addValue("expiraEm", expiraEm)
@@ -406,17 +406,17 @@ public class ContextoSocialPendenteJdbc {
     public record ContextoSocialPendenteAtivo(
             UUID id,
             Long clienteEcossistemaId,
-            UUID usuarioIdSugerido,
-            String loginSugerido,
+            UUID perfilSistemaIdSugerido,
+            String identificadorPublicoSistemaSugerido,
             String modoPendente,
             int tentativasFalhas,
             int tentativasMaximas
     ) {
         public boolean aceitaLogin(final String loginNormalizado) {
-            if (!StringUtils.hasText(loginSugerido) || !StringUtils.hasText(loginNormalizado)) {
+            if (!StringUtils.hasText(identificadorPublicoSistemaSugerido) || !StringUtils.hasText(loginNormalizado)) {
                 return false;
             }
-            return loginSugerido.trim().equalsIgnoreCase(loginNormalizado.trim());
+            return identificadorPublicoSistemaSugerido.trim().equalsIgnoreCase(loginNormalizado.trim());
         }
 
         public boolean modoEntrarEVincular() {

@@ -1,6 +1,6 @@
 package com.eickrono.api.identidade.aplicacao.servico;
 
-import com.eickrono.api.identidade.aplicacao.modelo.ContaLocalProjetoPorEmailResolvida;
+import com.eickrono.api.identidade.aplicacao.modelo.PerfilSistemaProjetoPorEmailResolvido;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Locale;
@@ -13,16 +13,16 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 @Component
-public class LocalizadorContaLocalProjetoPorEmailJdbc {
+public class LocalizadorPerfilSistemaProjetoPorEmailJdbc {
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
 
-    public LocalizadorContaLocalProjetoPorEmailJdbc(final NamedParameterJdbcTemplate jdbcTemplate) {
+    public LocalizadorPerfilSistemaProjetoPorEmailJdbc(final NamedParameterJdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = Objects.requireNonNull(jdbcTemplate, "jdbcTemplate é obrigatório");
     }
 
-    public Optional<ContaLocalProjetoPorEmailResolvida> localizar(final Long clienteEcossistemaId,
-                                                                  final String emailInformado) {
+    public Optional<PerfilSistemaProjetoPorEmailResolvido> localizar(final Long clienteEcossistemaId,
+                                                                     final String emailInformado) {
         if (clienteEcossistemaId == null || !StringUtils.hasText(emailInformado)) {
             return Optional.empty();
         }
@@ -54,8 +54,8 @@ public class LocalizadorContaLocalProjetoPorEmailJdbc {
                 """, params, this::mapear).stream().findFirst();
     }
 
-    private ContaLocalProjetoPorEmailResolvida mapear(final ResultSet rs, final int rowNum) throws SQLException {
-        return new ContaLocalProjetoPorEmailResolvida(
+    private PerfilSistemaProjetoPorEmailResolvido mapear(final ResultSet rs, final int rowNum) throws SQLException {
+        return new PerfilSistemaProjetoPorEmailResolvido(
                 rs.getObject("usuario_id", UUID.class),
                 rs.getString("email_normalizado"),
                 rs.getString("login_sugerido")

@@ -6,7 +6,7 @@ import static org.mockito.Mockito.when;
 
 import com.eickrono.api.identidade.aplicacao.excecao.FluxoPublicoException;
 import com.eickrono.api.identidade.aplicacao.modelo.ConviteOrganizacionalValidado;
-import com.eickrono.api.identidade.aplicacao.modelo.ContextoPessoaPerfil;
+import com.eickrono.api.identidade.aplicacao.modelo.ContextoPessoaPerfilSistema;
 import com.eickrono.api.identidade.dominio.modelo.ConviteOrganizacional;
 import com.eickrono.api.identidade.dominio.modelo.StatusConviteOrganizacional;
 import com.eickrono.api.identidade.dominio.repositorio.ConviteOrganizacionalRepositorio;
@@ -30,7 +30,7 @@ class ConviteOrganizacionalServiceTest {
     private ConviteOrganizacionalRepositorio conviteOrganizacionalRepositorio;
 
     @Mock
-    private ClienteContextoPessoaPerfil clienteContextoPessoaPerfil;
+    private ClienteContextoPessoaPerfilSistema clienteContextoPessoaPerfilSistema;
 
     private ConviteOrganizacionalService servico;
 
@@ -39,7 +39,7 @@ class ConviteOrganizacionalServiceTest {
         Clock clock = Clock.fixed(Instant.parse("2026-04-24T18:00:00Z"), ZoneOffset.UTC);
         servico = new ConviteOrganizacionalService(
                 conviteOrganizacionalRepositorio,
-                clienteContextoPessoaPerfil,
+                clienteContextoPessoaPerfilSistema,
                 clock
         );
     }
@@ -84,8 +84,8 @@ class ConviteOrganizacionalServiceTest {
         );
         when(conviteOrganizacionalRepositorio.findByCodigoIgnoreCase("ORG-ACME-2026"))
                 .thenReturn(Optional.of(convite));
-        when(clienteContextoPessoaPerfil.buscarPorEmail("convite@acme.test"))
-                .thenReturn(Optional.of(new ContextoPessoaPerfil(
+        when(clienteContextoPessoaPerfilSistema.buscarPorEmail("convite@acme.test"))
+                .thenReturn(Optional.of(new ContextoPessoaPerfilSistema(
                         10L,
                         "sub-usuario",
                         "convite@acme.test",

@@ -324,6 +324,268 @@ class VinculosSociaisControllerIT {
                         .value("https://cdn.eickrono.test/google.png"));
     }
 
+    @Test
+    void deveSincronizarVinculoSocialSemFotoDisponivel() throws Exception {
+        keycloakStub.definirIdentidadesFederadas(
+                "sub-123",
+                List.of(new IdentidadeFederadaKeycloak(
+                        ProvedorVinculoSocial.GOOGLE,
+                        "google-sub-1",
+                        "teste@gmail.com",
+                        "Pessoa Google",
+                        null)));
+
+        mockMvc.perform(post(ENDPOINT + "/google/sincronizacao")
+                        .param("aplicacaoId", "eickrono-thimisu-app")
+                        .with(jwtEscopo("vinculos:escrever")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.provedores[0].provedor").value("google"))
+                .andExpect(jsonPath("$.provedores[0].avatarPrincipalNoProjeto").value(false))
+                .andExpect(jsonPath("$.provedores[0].statusAvatarSocial").value("FOTO_NAO_DISPONIVEL"))
+                .andExpect(jsonPath("$.provedores[0].mensagemAvatarSocial")
+                        .value("Esta conta esta vinculada, mas nao ha foto disponivel para usar no perfil neste momento."));
+
+        assertThat(formaAcessoRepositorio.findAll().stream()
+                .filter(forma -> forma.getTipo() == TipoFormaAcesso.SOCIAL)
+                .map(FormaAcesso::getUrlAvatarExterno)
+                .toList())
+                .containsExactly((String) null);
+    }
+
+    @Test
+    void deveSincronizarVinculoSocialFacebookSemFotoDisponivel() throws Exception {
+        keycloakStub.definirIdentidadesFederadas(
+                "sub-123",
+                List.of(new IdentidadeFederadaKeycloak(
+                        ProvedorVinculoSocial.FACEBOOK,
+                        "facebook-sub-1",
+                        "usuario.facebook.test",
+                        "Pessoa Facebook",
+                        "")));
+
+        mockMvc.perform(post(ENDPOINT + "/facebook/sincronizacao")
+                        .param("aplicacaoId", "eickrono-thimisu-app")
+                        .with(jwtEscopo("vinculos:escrever")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.provedores[2].provedor").value("facebook"))
+                .andExpect(jsonPath("$.provedores[2].vinculado").value(true))
+                .andExpect(jsonPath("$.provedores[2].avatarPrincipalNoProjeto").value(false))
+                .andExpect(jsonPath("$.provedores[2].statusAvatarSocial").value("FOTO_NAO_DISPONIVEL"));
+
+        assertThat(formaAcessoRepositorio.findAll().stream()
+                .filter(forma -> forma.getTipo() == TipoFormaAcesso.SOCIAL)
+                .filter(forma -> "FACEBOOK".equals(forma.getProvedor()))
+                .map(FormaAcesso::getUrlAvatarExterno)
+                .toList())
+                .containsExactly((String) null);
+    }
+
+    @Test
+    void deveInformarQuandoProvedorNaoSuportaFotoNoProjetoAtual() throws Exception {
+        keycloakStub.definirIdentidadesFederadas(
+                "sub-123",
+                List.of(new IdentidadeFederadaKeycloak(
+                        ProvedorVinculoSocial.APPLE,
+                        "apple-sub-1",
+                        "usuario@icloud.test",
+                        "Pessoa Apple",
+                        null)));
+
+        mockMvc.perform(post(ENDPOINT + "/apple/sincronizacao")
+                        .param("aplicacaoId", "eickrono-thimisu-app")
+                        .with(jwtEscopo("vinculos:escrever")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.provedores[1].provedor").value("apple"))
+                .andExpect(jsonPath("$.provedores[1].vinculado").value(true))
+                .andExpect(jsonPath("$.provedores[1].statusAvatarSocial")
+                        .value("PROVEDOR_SEM_SUPORTE_DE_FOTO"))
+                .andExpect(jsonPath("$.provedores[1].mensagemAvatarSocial")
+                        .value("Esta conta esta vinculada, mas este provedor nao disponibiliza foto para uso no perfil neste aplicativo."));
+    }
+
+    @Test
+    void deveRejeitarAvatarPreferidoSocialQuandoRedeNaoPossuiFoto() throws Exception {
+        keycloakStub.definirIdentidadesFederadas(
+                "sub-123",
+                List.of(new IdentidadeFederadaKeycloak(
+                        ProvedorVinculoSocial.GOOGLE,
+                        "google-sub-1",
+                        "teste@gmail.com",
+                        "Pessoa Google",
+                        null)));
+
+        mockMvc.perform(post(ENDPOINT + "/google/sincronizacao")
+                        .param("aplicacaoId", "eickrono-thimisu-app")
+                        .with(jwtEscopo("vinculos:escrever")))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(put(ENDPOINT + "/avatar-preferido")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "aplicacaoId": "eickrono-thimisu-app",
+                                  "origem": "SOCIAL",
+                                  "provedor": "google"
+                                }
+                                """)
+                        .with(jwtEscopo("vinculos:escrever")))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.codigo").value("avatar_social_indisponivel"))
+                .andExpect(jsonPath("$.detalhes.provedor").value("google"));
+    }
+
+    @Test
+    void deveRejeitarAvatarPreferidoSocialFacebookQuandoRedeNaoPossuiFoto() throws Exception {
+        keycloakStub.definirIdentidadesFederadas(
+                "sub-123",
+                List.of(new IdentidadeFederadaKeycloak(
+                        ProvedorVinculoSocial.FACEBOOK,
+                        "facebook-sub-1",
+                        "usuario.facebook.test",
+                        "Pessoa Facebook",
+                        null)));
+
+        mockMvc.perform(post(ENDPOINT + "/facebook/sincronizacao")
+                        .param("aplicacaoId", "eickrono-thimisu-app")
+                        .with(jwtEscopo("vinculos:escrever")))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(put(ENDPOINT + "/avatar-preferido")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "aplicacaoId": "eickrono-thimisu-app",
+                                  "origem": "SOCIAL",
+                                  "provedor": "facebook"
+                                }
+                                """)
+                        .with(jwtEscopo("vinculos:escrever")))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.codigo").value("avatar_social_indisponivel"))
+                .andExpect(jsonPath("$.detalhes.provedor").value("facebook"));
+    }
+
+    @Test
+    void deveLimparAvatarPreferidoQuandoProvedorPerderFotoNaSincronizacao() throws Exception {
+        keycloakStub.definirIdentidadesFederadas(
+                "sub-123",
+                List.of(new IdentidadeFederadaKeycloak(
+                        ProvedorVinculoSocial.GOOGLE,
+                        "google-sub-1",
+                        "teste@gmail.com",
+                        "Pessoa Google",
+                        "https://cdn.eickrono.test/google.png")));
+
+        mockMvc.perform(post(ENDPOINT + "/google/sincronizacao")
+                        .param("aplicacaoId", "eickrono-thimisu-app")
+                        .with(jwtEscopo("vinculos:escrever")))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(put(ENDPOINT + "/avatar-preferido")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "aplicacaoId": "eickrono-thimisu-app",
+                                  "origem": "SOCIAL",
+                                  "provedor": "google"
+                                }
+                                """)
+                        .with(jwtEscopo("vinculos:escrever")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.avatarPreferidoOrigem").value("SOCIAL"));
+
+        keycloakStub.definirIdentidadesFederadas(
+                "sub-123",
+                List.of(new IdentidadeFederadaKeycloak(
+                        ProvedorVinculoSocial.GOOGLE,
+                        "google-sub-1",
+                        "teste@gmail.com",
+                        "Pessoa Google",
+                        "   ")));
+
+        mockMvc.perform(post(ENDPOINT + "/google/sincronizacao")
+                        .param("aplicacaoId", "eickrono-thimisu-app")
+                        .with(jwtEscopo("vinculos:escrever")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.avatarPreferidoOrigem").value("NENHUM"))
+                .andExpect(jsonPath("$.provedores[0].avatarPrincipalNoProjeto").value(false))
+                .andExpect(jsonPath("$.provedores[0].statusAvatarSocial")
+                        .value("FOTO_REMOVIDA_APOS_SINCRONIZACAO"))
+                .andExpect(jsonPath("$.provedores[0].mensagemAvatarSocial")
+                        .value("A foto desta rede social nao esta mais disponivel. Por isso ela deixou de poder ser usada como foto de perfil."));
+
+        assertThat(formaAcessoRepositorio.findAll().stream()
+                .filter(forma -> forma.getTipo() == TipoFormaAcesso.SOCIAL)
+                .map(FormaAcesso::getUrlAvatarExterno)
+                .toList())
+                .containsExactly((String) null);
+    }
+
+    @Test
+    void deveManterAvatarPreferidoQuandoOutroProvedorSemFotoForSincronizado() throws Exception {
+        keycloakStub.definirIdentidadesFederadas(
+                "sub-123",
+                List.of(
+                        new IdentidadeFederadaKeycloak(
+                                ProvedorVinculoSocial.GOOGLE,
+                                "google-sub-1",
+                                "teste@gmail.com",
+                                "Pessoa Google",
+                                "https://cdn.eickrono.test/google.png"),
+                        new IdentidadeFederadaKeycloak(
+                                ProvedorVinculoSocial.FACEBOOK,
+                                "facebook-sub-1",
+                                "usuario.facebook.test",
+                                "Pessoa Facebook",
+                                "https://cdn.eickrono.test/facebook.png")));
+
+        mockMvc.perform(post(ENDPOINT + "/google/sincronizacao")
+                        .param("aplicacaoId", "eickrono-thimisu-app")
+                        .with(jwtEscopo("vinculos:escrever")))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(put(ENDPOINT + "/avatar-preferido")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "aplicacaoId": "eickrono-thimisu-app",
+                                  "origem": "SOCIAL",
+                                  "provedor": "google"
+                                }
+                                """)
+                        .with(jwtEscopo("vinculos:escrever")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.avatarPreferidoOrigem").value("SOCIAL"))
+                .andExpect(jsonPath("$.provedores[0].avatarPrincipalNoProjeto").value(true));
+
+        keycloakStub.definirIdentidadesFederadas(
+                "sub-123",
+                List.of(
+                        new IdentidadeFederadaKeycloak(
+                                ProvedorVinculoSocial.GOOGLE,
+                                "google-sub-1",
+                                "teste@gmail.com",
+                                "Pessoa Google",
+                                "https://cdn.eickrono.test/google.png"),
+                        new IdentidadeFederadaKeycloak(
+                                ProvedorVinculoSocial.FACEBOOK,
+                                "facebook-sub-1",
+                                "usuario.facebook.test",
+                                "Pessoa Facebook",
+                                "   ")));
+
+        mockMvc.perform(post(ENDPOINT + "/facebook/sincronizacao")
+                        .param("aplicacaoId", "eickrono-thimisu-app")
+                        .with(jwtEscopo("vinculos:escrever")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.avatarPreferidoOrigem").value("SOCIAL"))
+                .andExpect(jsonPath("$.avatarPreferidoUrl").value("https://cdn.eickrono.test/google.png"))
+                .andExpect(jsonPath("$.provedores[0].avatarPrincipalNoProjeto").value(true))
+                .andExpect(jsonPath("$.provedores[2].avatarPrincipalNoProjeto").value(false))
+                .andExpect(jsonPath("$.provedores[2].statusAvatarSocial")
+                        .value("FOTO_REMOVIDA_APOS_SINCRONIZACAO"));
+    }
+
     private org.springframework.test.web.servlet.request.RequestPostProcessor jwtEscopo(final String escopo) {
         return jwt().jwt(builder -> builder
                         .subject("sub-123")

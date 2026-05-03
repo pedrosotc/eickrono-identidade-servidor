@@ -7,8 +7,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.eickrono.api.identidade.AplicacaoApiIdentidade;
-import com.eickrono.api.identidade.aplicacao.modelo.ContextoPessoaPerfil;
-import com.eickrono.api.identidade.aplicacao.servico.ClienteContextoPessoaPerfil;
+import com.eickrono.api.identidade.aplicacao.modelo.ContextoPessoaPerfilSistema;
+import com.eickrono.api.identidade.aplicacao.servico.ClienteContextoPessoaPerfilSistema;
 import com.eickrono.api.identidade.dominio.modelo.VinculoOrganizacional;
 import com.eickrono.api.identidade.dominio.repositorio.VinculoOrganizacionalRepositorio;
 import com.eickrono.api.identidade.support.ClienteAdministracaoCadastroKeycloakStubConfiguration;
@@ -45,7 +45,7 @@ class VinculosOrganizacionaisControllerIT {
     private VinculoOrganizacionalRepositorio vinculoOrganizacionalRepositorio;
 
     @MockBean
-    private ClienteContextoPessoaPerfil clienteContextoPessoaPerfil;
+    private ClienteContextoPessoaPerfilSistema clienteContextoPessoaPerfilSistema;
 
     @BeforeEach
     void limparEstado() {
@@ -76,8 +76,8 @@ class VinculosOrganizacionaisControllerIT {
                 false,
                 OffsetDateTime.parse("2026-04-02T10:00:00Z")
         ));
-        when(clienteContextoPessoaPerfil.buscarPorSub("sub-123"))
-                .thenReturn(Optional.of(new ContextoPessoaPerfil(
+        when(clienteContextoPessoaPerfilSistema.buscarPorSub("sub-123"))
+                .thenReturn(Optional.of(new ContextoPessoaPerfilSistema(
                         10L,
                         "sub-123",
                         "jane@empresa.test",
@@ -100,7 +100,7 @@ class VinculosOrganizacionaisControllerIT {
 
     @Test
     void deveRetornarListaVaziaQuandoNaoHouverContextoLocal() throws Exception {
-        when(clienteContextoPessoaPerfil.buscarPorSub("sub-123"))
+        when(clienteContextoPessoaPerfilSistema.buscarPorSub("sub-123"))
                 .thenReturn(Optional.empty());
 
         mockMvc.perform(get(ENDPOINT).with(jwtEscopo("vinculos:ler")))

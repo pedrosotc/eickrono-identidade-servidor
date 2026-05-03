@@ -17,16 +17,16 @@ import org.springframework.stereotype.Service;
 public class ConviteOrganizacionalService {
 
     private final ConviteOrganizacionalRepositorio conviteOrganizacionalRepositorio;
-    private final ClienteContextoPessoaPerfil clienteContextoPessoaPerfil;
+    private final ClienteContextoPessoaPerfilSistema clienteContextoPessoaPerfilSistema;
     private final Clock clock;
 
     public ConviteOrganizacionalService(final ConviteOrganizacionalRepositorio conviteOrganizacionalRepositorio,
-                                        final ClienteContextoPessoaPerfil clienteContextoPessoaPerfil,
+                                        final ClienteContextoPessoaPerfilSistema clienteContextoPessoaPerfilSistema,
                                         final Clock clock) {
         this.conviteOrganizacionalRepositorio = Objects.requireNonNull(
                 conviteOrganizacionalRepositorio, "conviteOrganizacionalRepositorio e obrigatorio");
-        this.clienteContextoPessoaPerfil = Objects.requireNonNull(
-                clienteContextoPessoaPerfil, "clienteContextoPessoaPerfil e obrigatorio");
+        this.clienteContextoPessoaPerfilSistema = Objects.requireNonNull(
+                clienteContextoPessoaPerfilSistema, "clienteContextoPessoaPerfilSistema e obrigatorio");
         this.clock = Objects.requireNonNull(clock, "clock e obrigatorio");
     }
 
@@ -85,7 +85,7 @@ public class ConviteOrganizacionalService {
         if (emailConvidado == null || emailConvidado.isBlank()) {
             return false;
         }
-        return clienteContextoPessoaPerfil.buscarPorEmail(emailConvidado.trim().toLowerCase(Locale.ROOT)).isPresent();
+        return clienteContextoPessoaPerfilSistema.buscarPorEmail(emailConvidado.trim().toLowerCase(Locale.ROOT)).isPresent();
     }
 
     private String normalizarCodigo(final String codigo) {

@@ -29,16 +29,17 @@ import com.eickrono.api.identidade.AplicacaoApiIdentidade;
 import com.eickrono.api.identidade.aplicacao.modelo.CadastroInternoRealizado;
 import com.eickrono.api.identidade.aplicacao.modelo.ConfirmacaoEmailCadastroPublicoRealizada;
 import com.eickrono.api.identidade.aplicacao.modelo.ConviteOrganizacionalValidado;
-import com.eickrono.api.identidade.aplicacao.modelo.ContextoPessoaPerfil;
+import com.eickrono.api.identidade.aplicacao.modelo.ContextoPessoaPerfilSistema;
 import com.eickrono.api.identidade.aplicacao.modelo.IdentidadeFederadaKeycloak;
-import com.eickrono.api.identidade.aplicacao.modelo.ProvisionamentoPerfilRealizado;
+import com.eickrono.api.identidade.aplicacao.modelo.ProvisionamentoPerfilSistemaRealizado;
 import com.eickrono.api.identidade.aplicacao.modelo.VinculoSocialPendenteCadastro;
 import com.eickrono.api.identidade.aplicacao.servico.CadastroContaInternaServico;
 import com.eickrono.api.identidade.aplicacao.servico.CanalEnvioCodigoCadastroEmail;
 import com.eickrono.api.identidade.aplicacao.servico.CanalEnvioCodigoCadastroTelefone;
 import com.eickrono.api.identidade.aplicacao.servico.CanalNotificacaoTentativaCadastroEmail;
-import com.eickrono.api.identidade.aplicacao.servico.ClienteContextoPessoaPerfil;
-import com.eickrono.api.identidade.aplicacao.servico.ProvisionadorPerfilDominioServico;
+import com.eickrono.api.identidade.aplicacao.servico.ClienteContextoPessoaPerfilSistema;
+import com.eickrono.api.identidade.aplicacao.servico.ConsultadorDisponibilidadeUsuarioSistemaServico;
+import com.eickrono.api.identidade.aplicacao.servico.ProvisionadorPerfilSistemaServico;
 import com.eickrono.api.identidade.support.ClienteAdministracaoCadastroKeycloakStubConfiguration;
 import com.eickrono.api.identidade.support.InfraestruturaTesteIdentidade;
 import com.eickrono.api.identidade.dominio.modelo.StatusRegistroDispositivo;
@@ -140,7 +141,7 @@ class RegistroDispositivoControllerIT {
     private JdbcTemplate jdbcTemplate;
 
     @MockBean
-    private ClienteContextoPessoaPerfil clienteContextoPessoaPerfil;
+    private ClienteContextoPessoaPerfilSistema clienteContextoPessoaPerfilSistema;
 
     @MockBean
     private CanalEnvioCodigoCadastroEmail canalEnvioCodigoCadastroEmail;
@@ -152,7 +153,10 @@ class RegistroDispositivoControllerIT {
     private CanalNotificacaoTentativaCadastroEmail canalNotificacaoTentativaCadastroEmail;
 
     @MockBean
-    private ProvisionadorPerfilDominioServico provisionadorPerfilDominioServico;
+    private ProvisionadorPerfilSistemaServico provisionadorPerfilSistemaServico;
+
+    @MockBean
+    private ConsultadorDisponibilidadeUsuarioSistemaServico consultadorDisponibilidadeUsuarioSistemaServico;
 
     private final Map<UUID, String> codigosCadastroEmail = new ConcurrentHashMap<>();
     private final Map<UUID, String> codigosCadastroTelefone = new ConcurrentHashMap<>();
@@ -218,9 +222,11 @@ class RegistroDispositivoControllerIT {
         );
         org.mockito.Mockito.doNothing().when(canalNotificacaoTentativaCadastroEmail)
                 .notificar(org.mockito.ArgumentMatchers.anyString());
-        when(provisionadorPerfilDominioServico.usuarioDisponivel(org.mockito.ArgumentMatchers.anyString()))
+        when(consultadorDisponibilidadeUsuarioSistemaServico.usuarioDisponivel(
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString()))
                 .thenReturn(true);
-        ContextoPessoaPerfil contexto = new ContextoPessoaPerfil(
+        ContextoPessoaPerfilSistema contexto = new ContextoPessoaPerfilSistema(
                 123L,
                 "usuario-xyz",
                 "teste@eickrono.com",
@@ -228,9 +234,9 @@ class RegistroDispositivoControllerIT {
                 null,
                 "ATIVO"
         );
-        when(clienteContextoPessoaPerfil.buscarPorSub("usuario-xyz"))
+        when(clienteContextoPessoaPerfilSistema.buscarPorSub("usuario-xyz"))
                 .thenReturn(Optional.of(contexto));
-        when(clienteContextoPessoaPerfil.buscarPorEmail("teste@eickrono.com"))
+        when(clienteContextoPessoaPerfilSistema.buscarPorEmail("teste@eickrono.com"))
                 .thenReturn(Optional.of(contexto));
     }
 
@@ -430,26 +436,12 @@ class RegistroDispositivoControllerIT {
         );
         String codigo = Optional.ofNullable(codigosCadastroEmail.get(cadastro.cadastroId()))
                 .orElseThrow(() -> new IllegalStateException("Codigo de cadastro nao capturado"));
-        Pessoa pessoaPendente = pessoaRepositorio.save(new Pessoa(
-                cadastro.subjectRemoto(),
-                cadastro.emailPrincipal(),
-                "Ana Souza",
-                java.util.Set.of(),
-                java.util.Set.of(),
-                OffsetDateTime.parse("2026-03-19T10:00:00Z")
-        ));
-        perfilIdentidadeRepositorio.save(new PerfilIdentidade(
-                cadastro.subjectRemoto(),
-                cadastro.emailPrincipal(),
-                "Ana Souza",
-                java.util.Set.of(),
-                java.util.Set.of(),
-                OffsetDateTime.parse("2026-03-19T10:00:00Z")
-        ));
-        when(provisionadorPerfilDominioServico.provisionarCadastroConfirmado(
-                org.mockito.ArgumentMatchers.any(CadastroConta.class)))
-                .thenReturn(new ProvisionamentoPerfilRealizado(
-                        pessoaPendente.getId(),
+        Pessoa pessoaPendente = pessoaRepositorio.findBySub(cadastro.subjectRemoto())
+                .orElseThrow(() -> new IllegalStateException("Pessoa pendente nao encontrada"));
+        when(provisionadorPerfilSistemaServico.provisionarCadastroConfirmado(
+                org.mockito.ArgumentMatchers.any(CadastroConta.class),
+                org.mockito.ArgumentMatchers.eq(pessoaPendente.getId())))
+                .thenReturn(new ProvisionamentoPerfilSistemaRealizado(
                         "usuario-ana-001",
                         "ATIVO"
                 ));
@@ -475,16 +467,16 @@ class RegistroDispositivoControllerIT {
                 .extracting(VinculoSocial::getProvedor, VinculoSocial::getIdentificador)
                 .contains(org.assertj.core.groups.Tuple.tuple("google", "ana.google"));
 
-        when(clienteContextoPessoaPerfil.buscarPorSub("social-google-sub-1"))
+        when(clienteContextoPessoaPerfilSistema.buscarPorSub("social-google-sub-1"))
                 .thenReturn(Optional.empty());
-        when(clienteContextoPessoaPerfil.buscarPorPessoaId(pessoa.getId()))
-                .thenReturn(Optional.of(new ContextoPessoaPerfil(
+        when(clienteContextoPessoaPerfilSistema.buscarPorPessoaId(pessoa.getId()))
+                .thenReturn(Optional.of(new ContextoPessoaPerfilSistema(
                         pessoa.getId(),
                         pessoa.getSub(),
                         pessoa.getEmail(),
                         pessoa.getNome(),
-                        confirmacao.usuarioId(),
-                        confirmacao.statusUsuario()
+                        confirmacao.perfilSistemaId(),
+                        confirmacao.statusPerfilSistema()
                 )));
         clienteAdministracaoCadastroKeycloakStub.definirIdentidadesFederadas(
                 "social-google-sub-1",
@@ -563,26 +555,12 @@ class RegistroDispositivoControllerIT {
         );
         String codigo = Optional.ofNullable(codigosCadastroEmail.get(cadastro.cadastroId()))
                 .orElseThrow(() -> new IllegalStateException("Codigo de cadastro nao capturado"));
-        Pessoa pessoaPendente = pessoaRepositorio.save(new Pessoa(
-                cadastro.subjectRemoto(),
-                cadastro.emailPrincipal(),
-                "Jane Doe",
-                java.util.Set.of(),
-                java.util.Set.of(),
-                OffsetDateTime.parse("2026-03-19T10:00:00Z")
-        ));
-        perfilIdentidadeRepositorio.save(new PerfilIdentidade(
-                cadastro.subjectRemoto(),
-                cadastro.emailPrincipal(),
-                "Jane Doe",
-                java.util.Set.of(),
-                java.util.Set.of(),
-                OffsetDateTime.parse("2026-03-19T10:00:00Z")
-        ));
-        when(provisionadorPerfilDominioServico.provisionarCadastroConfirmado(
-                org.mockito.ArgumentMatchers.any(CadastroConta.class)))
-                .thenReturn(new ProvisionamentoPerfilRealizado(
-                        pessoaPendente.getId(),
+        Pessoa pessoaPendente = pessoaRepositorio.findBySub(cadastro.subjectRemoto())
+                .orElseThrow(() -> new IllegalStateException("Pessoa pendente nao encontrada"));
+        when(provisionadorPerfilSistemaServico.provisionarCadastroConfirmado(
+                org.mockito.ArgumentMatchers.any(CadastroConta.class),
+                org.mockito.ArgumentMatchers.eq(pessoaPendente.getId())))
+                .thenReturn(new ProvisionamentoPerfilSistemaRealizado(
                         "usuario-jane-001",
                         "ATIVO"
                 ));
@@ -590,7 +568,7 @@ class RegistroDispositivoControllerIT {
         cadastroContaInternaServico.confirmarEmailPublico(cadastro.cadastroId(), codigo, null);
 
         VinculoOrganizacional vinculo = vinculoOrganizacionalRepositorio
-                .findByOrganizacaoIdAndUsuarioIdPerfil("org-acme", "usuario-jane-001")
+                .findByOrganizacaoIdAndPerfilSistemaId("org-acme", "usuario-jane-001")
                 .orElseThrow(() -> new IllegalStateException("Vinculo organizacional nao criado"));
         assertThat(vinculo.getCadastroId()).isEqualTo(cadastro.cadastroId());
         assertThat(vinculo.getNomeOrganizacao()).isEqualTo("Acme Educacao");
@@ -603,7 +581,7 @@ class RegistroDispositivoControllerIT {
 
     @Test
     void deveResponderErroEstruturadoQuandoSessaoSocialNaoPossuiContextoLocal() throws Exception {
-        when(clienteContextoPessoaPerfil.buscarPorSub("usuario-xyz"))
+        when(clienteContextoPessoaPerfilSistema.buscarPorSub("usuario-xyz"))
                 .thenReturn(Optional.empty());
         clienteAdministracaoCadastroKeycloakStub.definirIdentidadesFederadas(
                 "usuario-xyz",
@@ -686,8 +664,8 @@ class RegistroDispositivoControllerIT {
                 OffsetDateTime.parse("2026-04-01T10:00:00Z"),
                 OffsetDateTime.parse("2026-04-01T10:00:00Z")
         ));
-        when(clienteContextoPessoaPerfil.buscarPorSub("usuario-xyz"))
-                .thenReturn(Optional.of(new ContextoPessoaPerfil(
+        when(clienteContextoPessoaPerfilSistema.buscarPorSub("usuario-xyz"))
+                .thenReturn(Optional.of(new ContextoPessoaPerfilSistema(
                         123L,
                         "usuario-xyz",
                         "teste@eickrono.com",
@@ -721,10 +699,10 @@ class RegistroDispositivoControllerIT {
     }
 
     @Test
-    void deveSugerirEntrarEVincularQuandoSessaoSocialEncontrarContaLocalNoProjetoAtualPorEmail() throws Exception {
-        when(clienteContextoPessoaPerfil.buscarPorSub("usuario-sem-conta-local"))
+    void deveSugerirEntrarEVincularQuandoSessaoSocialEncontrarPerfilSistemaNoProjetoAtualPorEmail() throws Exception {
+        when(clienteContextoPessoaPerfilSistema.buscarPorSub("usuario-sem-conta-local"))
                 .thenReturn(Optional.empty());
-        vincularContaLocalAoProjetoAtual(SUB_CONTA_PROJETO_ATUAL, EMAIL_CONTA_PROJETO_ATUAL);
+        vincularPerfilSistemaAoProjetoAtual(SUB_CONTA_PROJETO_ATUAL, EMAIL_CONTA_PROJETO_ATUAL);
         clienteAdministracaoCadastroKeycloakStub.definirIdentidadesFederadas(
                 "usuario-sem-conta-local",
                 java.util.List.of(new IdentidadeFederadaKeycloak(
@@ -789,8 +767,8 @@ class RegistroDispositivoControllerIT {
 
     @Test
     void deveResponderContaDesabilitadaQuandoSessaoSocialEncontrarContaBloqueada() throws Exception {
-        when(clienteContextoPessoaPerfil.buscarPorSub("usuario-xyz"))
-                .thenReturn(Optional.of(new ContextoPessoaPerfil(
+        when(clienteContextoPessoaPerfilSistema.buscarPorSub("usuario-xyz"))
+                .thenReturn(Optional.of(new ContextoPessoaPerfilSistema(
                         123L,
                         "usuario-xyz",
                         "teste@eickrono.com",
@@ -824,7 +802,7 @@ class RegistroDispositivoControllerIT {
                 .andExpect(jsonPath("$.detalhes.acaoSugerida").value("SUPORTE"));
     }
 
-    void deveBloquearSessaoSocialQuandoContaLocalEncontradaAindaNaoPossuirEmailVerificado() throws Exception {
+    void deveBloquearSessaoSocialQuandoPerfilSistemaEncontradoAindaNaoPossuirEmailVerificado() throws Exception {
         Pessoa pessoa = pessoaRepositorio.save(new Pessoa(
                 "sub-conta-local",
                 "face@eickrono.com",
@@ -874,10 +852,10 @@ class RegistroDispositivoControllerIT {
                 OffsetDateTime.parse("2026-04-01T10:00:00Z")
         ));
 
-        when(clienteContextoPessoaPerfil.buscarPorSub("usuario-social-facebook"))
+        when(clienteContextoPessoaPerfilSistema.buscarPorSub("usuario-social-facebook"))
                 .thenReturn(Optional.empty());
-        when(clienteContextoPessoaPerfil.buscarPorPessoaId(pessoa.getId()))
-                .thenReturn(Optional.of(new ContextoPessoaPerfil(
+        when(clienteContextoPessoaPerfilSistema.buscarPorPessoaId(pessoa.getId()))
+                .thenReturn(Optional.of(new ContextoPessoaPerfilSistema(
                         pessoa.getId(),
                         pessoa.getSub(),
                         pessoa.getEmail(),
@@ -925,7 +903,7 @@ class RegistroDispositivoControllerIT {
 
     @Test
     void deveReconhecerContaJaVinculadaPorFormaAcessoSocialQuandoSubAindaNaoPossuiContextoLocal() throws Exception {
-        when(clienteContextoPessoaPerfil.buscarPorSub("usuario-xyz"))
+        when(clienteContextoPessoaPerfilSistema.buscarPorSub("usuario-xyz"))
                 .thenReturn(Optional.empty());
         Pessoa pessoa = pessoaRepositorio.save(new Pessoa(
                 "sub-conta-local",
@@ -953,8 +931,8 @@ class RegistroDispositivoControllerIT {
                 OffsetDateTime.parse("2026-03-19T10:05:00Z"),
                 OffsetDateTime.parse("2026-03-19T10:05:00Z")
         ));
-        when(clienteContextoPessoaPerfil.buscarPorPessoaId(pessoa.getId()))
-                .thenReturn(Optional.of(new ContextoPessoaPerfil(
+        when(clienteContextoPessoaPerfilSistema.buscarPorPessoaId(pessoa.getId()))
+                .thenReturn(Optional.of(new ContextoPessoaPerfilSistema(
                         pessoa.getId(),
                         pessoa.getSub(),
                         pessoa.getEmail(),
@@ -1062,7 +1040,7 @@ class RegistroDispositivoControllerIT {
         return Objects.requireNonNull(MediaType.APPLICATION_JSON);
     }
 
-    private void vincularContaLocalAoProjetoAtual(final String subRemoto, final String email) {
+    private void vincularPerfilSistemaAoProjetoAtual(final String subRemoto, final String email) {
         final Long clienteEcossistemaId = buscarClienteEcossistemaId("eickrono-thimisu-app");
         final UUID usuarioId = UUID.randomUUID();
         final UUID pessoaId = UUID.randomUUID();

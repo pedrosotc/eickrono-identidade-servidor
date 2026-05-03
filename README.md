@@ -8,6 +8,20 @@ identificador lógico do serviço em runtime continua sendo
 `api-identidade-eickrono` por compatibilidade com o ecossistema atual
 (Keycloak, audiences e compose local).
 
+## Diretriz de nomenclatura
+
+No contexto de identidade, modelos, contratos, tabelas, enums e documentação
+devem evitar nomes específicos de produto quando o conceito for compartilhado
+por vários sistemas do ecossistema.
+
+Regra prática:
+
+- preferir nomes gerais como `cliente`, `sistema`, `vinculo`, `perfilSistema`
+  e equivalentes;
+- evitar carregar nomes como `Thimisu` para conceitos que pertencem ao
+  ecossistema inteiro;
+- usar o nome de um produto só quando a regra for realmente exclusiva dele.
+
 ## Papel
 
 - expor os endpoints publicos de cadastro, login, recuperacao de senha e sessao

@@ -20,6 +20,10 @@ public record IdentidadeFederadaKeycloak(
 
     public IdentidadeFederadaKeycloak {
         Objects.requireNonNull(provedor, "provedor é obrigatório");
+        identificadorExterno = normalizarOpcional(identificadorExterno);
+        nomeUsuarioExterno = normalizarOpcional(nomeUsuarioExterno);
+        nomeExibicaoExterno = normalizarOpcional(nomeExibicaoExterno);
+        urlAvatarExterno = normalizarOpcional(urlAvatarExterno);
     }
 
     public String identificadorCanonico() {
@@ -44,5 +48,13 @@ public record IdentidadeFederadaKeycloak(
             return nomeExibicaoExterno.trim();
         }
         return identificadorExibicao();
+    }
+
+    private static String normalizarOpcional(final String valor) {
+        if (valor == null) {
+            return null;
+        }
+        String texto = valor.trim();
+        return texto.isEmpty() ? null : texto;
     }
 }

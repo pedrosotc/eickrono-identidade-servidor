@@ -6,7 +6,7 @@ import com.eickrono.api.identidade.aplicacao.modelo.ConfirmacaoCodigoRecuperacao
 import com.eickrono.api.identidade.aplicacao.modelo.ConfirmacaoEmailCadastroPublicoRealizada;
 import com.eickrono.api.identidade.aplicacao.modelo.ConviteOrganizacionalValidado;
 import com.eickrono.api.identidade.aplicacao.modelo.ContextoSolicitacaoFluxoPublico;
-import com.eickrono.api.identidade.aplicacao.modelo.ContextoPessoaPerfil;
+import com.eickrono.api.identidade.aplicacao.modelo.ContextoPessoaPerfilSistema;
 import com.eickrono.api.identidade.aplicacao.modelo.DispositivoSessaoRegistrado;
 import com.eickrono.api.identidade.aplicacao.modelo.RecuperacaoSenhaIniciada;
 import com.eickrono.api.identidade.aplicacao.modelo.SessaoInternaAutenticada;
@@ -16,7 +16,7 @@ import com.eickrono.api.identidade.aplicacao.servico.AtestacaoAppServico;
 import com.eickrono.api.identidade.aplicacao.servico.AvaliacaoSegurancaAplicativoService;
 import com.eickrono.api.identidade.aplicacao.servico.AutenticacaoSessaoInternaServico;
 import com.eickrono.api.identidade.aplicacao.servico.CadastroContaInternaServico;
-import com.eickrono.api.identidade.aplicacao.servico.ClienteContextoPessoaPerfil;
+import com.eickrono.api.identidade.aplicacao.servico.ClienteContextoPessoaPerfilSistema;
 import com.eickrono.api.identidade.aplicacao.servico.ContextoSocialPendenteJdbc;
 import com.eickrono.api.identidade.aplicacao.servico.ConviteOrganizacionalService;
 import com.eickrono.api.identidade.aplicacao.servico.RecuperacaoSenhaService;
@@ -77,7 +77,7 @@ public class FluxoPublicoController {
     private final AtestacaoAppServico atestacaoAppServico;
     private final AvaliacaoSegurancaAplicativoService avaliacaoSegurancaAplicativoService;
     private final AutenticacaoSessaoInternaServico autenticacaoSessaoInternaServico;
-    private final ClienteContextoPessoaPerfil clienteContextoPessoaPerfil;
+    private final ClienteContextoPessoaPerfilSistema clienteContextoPessoaPerfilSistema;
     private final ContextoSocialPendenteJdbc contextoSocialPendenteJdbc;
     private final ConviteOrganizacionalService conviteOrganizacionalService;
     private final RecuperacaoSenhaService recuperacaoSenhaService;
@@ -88,7 +88,7 @@ public class FluxoPublicoController {
                                   final AtestacaoAppServico atestacaoAppServico,
                                   final AvaliacaoSegurancaAplicativoService avaliacaoSegurancaAplicativoService,
                                   final AutenticacaoSessaoInternaServico autenticacaoSessaoInternaServico,
-                                  final ClienteContextoPessoaPerfil clienteContextoPessoaPerfil,
+                                  final ClienteContextoPessoaPerfilSistema clienteContextoPessoaPerfilSistema,
                                   final ContextoSocialPendenteJdbc contextoSocialPendenteJdbc,
                                   final ConviteOrganizacionalService conviteOrganizacionalService,
                                   final RecuperacaoSenhaService recuperacaoSenhaService,
@@ -101,8 +101,8 @@ public class FluxoPublicoController {
                 avaliacaoSegurancaAplicativoService, "avaliacaoSegurancaAplicativoService é obrigatório");
         this.autenticacaoSessaoInternaServico = Objects.requireNonNull(
                 autenticacaoSessaoInternaServico, "autenticacaoSessaoInternaServico é obrigatório");
-        this.clienteContextoPessoaPerfil = Objects.requireNonNull(
-                clienteContextoPessoaPerfil, "clienteContextoPessoaPerfil é obrigatório");
+        this.clienteContextoPessoaPerfilSistema = Objects.requireNonNull(
+                clienteContextoPessoaPerfilSistema, "clienteContextoPessoaPerfilSistema é obrigatório");
         this.contextoSocialPendenteJdbc = Objects.requireNonNull(
                 contextoSocialPendenteJdbc, "contextoSocialPendenteJdbc é obrigatório");
         this.conviteOrganizacionalService = Objects.requireNonNull(
@@ -231,16 +231,26 @@ public class FluxoPublicoController {
 
     @GetMapping("/cadastros/usuarios/disponibilidade")
     public DisponibilidadeUsuarioCadastroApiResposta consultarDisponibilidadeUsuario(
-            @RequestParam final String usuario) {
+            @RequestParam final String usuario,
+            @RequestParam final String aplicacaoId) {
         String usuarioNormalizado = Objects.requireNonNull(usuario, "usuario é obrigatório")
+                .trim()
+                .toLowerCase(Locale.ROOT);
+        String aplicacaoIdNormalizado = Objects.requireNonNull(aplicacaoId, "aplicacaoId é obrigatório")
                 .trim()
                 .toLowerCase(Locale.ROOT);
         if (usuarioNormalizado.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "usuario é obrigatório.");
         }
+        if (aplicacaoIdNormalizado.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "aplicacaoId é obrigatório.");
+        }
         return new DisponibilidadeUsuarioCadastroApiResposta(
                 usuarioNormalizado,
-                cadastroContaInternaServico.usuarioDisponivelPublico(usuarioNormalizado)
+                cadastroContaInternaServico.identificadorPublicoSistemaDisponivelPublico(
+                        usuarioNormalizado,
+                        aplicacaoIdNormalizado
+                )
         );
     }
 
@@ -255,8 +265,8 @@ public class FluxoPublicoController {
         );
         return new ConfirmacaoEmailCadastroApiResposta(
                 confirmacao.cadastroId().toString(),
-                confirmacao.usuarioId(),
-                confirmacao.statusUsuario(),
+                confirmacao.perfilSistemaId(),
+                confirmacao.statusPerfilSistema(),
                 confirmacao.emailPrincipal(),
                 confirmacao.emailConfirmado(),
                 confirmacao.telefoneConfirmado(),
@@ -276,8 +286,8 @@ public class FluxoPublicoController {
         );
         return new ConfirmacaoEmailCadastroApiResposta(
                 confirmacao.cadastroId().toString(),
-                confirmacao.usuarioId(),
-                confirmacao.statusUsuario(),
+                confirmacao.perfilSistemaId(),
+                confirmacao.statusPerfilSistema(),
                 confirmacao.emailPrincipal(),
                 confirmacao.emailConfirmado(),
                 confirmacao.telefoneConfirmado(),
@@ -463,7 +473,7 @@ public class FluxoPublicoController {
                 sessao.autenticado(),
                 sessao.expiresIn()
         );
-        ContextoPessoaPerfil contexto = clienteContextoPessoaPerfil.buscarPorEmail(loginResolvido.loginCanonico())
+        ContextoPessoaPerfilSistema contexto = clienteContextoPessoaPerfilSistema.buscarPorEmail(loginResolvido.loginCanonico())
                 .or(loginResolvido::contextoResolvido)
                 .orElseThrow(() -> {
                     LOGGER.warn(
@@ -476,12 +486,12 @@ public class FluxoPublicoController {
                             "A conta ainda não está liberada para utilizar o aplicativo."
                     );
                 });
-        String statusUsuario = Objects.requireNonNullElse(contexto.statusUsuario(), STATUS_LIBERADO);
-        if (!STATUS_LIBERADO.equalsIgnoreCase(statusUsuario)) {
+        String statusPerfilSistema = Objects.requireNonNullElse(contexto.statusPerfilSistema(), STATUS_LIBERADO);
+        if (!STATUS_LIBERADO.equalsIgnoreCase(statusPerfilSistema)) {
             LOGGER.warn(
-                    "login_publico_contexto_bloqueado login={} statusUsuario={}",
+                    "login_publico_contexto_bloqueado login={} statusPerfilSistema={}",
                     loginMascarado,
-                    statusUsuario
+                    statusPerfilSistema
             );
             throw new FluxoPublicoException(
                     HttpStatus.FORBIDDEN,
@@ -494,10 +504,10 @@ public class FluxoPublicoController {
                 requisicao.dispositivo()
         );
         LOGGER.info(
-                "login_publico_sucesso login={} usuarioId={} statusUsuario={} tokenDispositivoEmitido={} tokenDispositivoExpiraEm={}",
+                "login_publico_sucesso login={} perfilSistemaId={} statusPerfilSistema={} tokenDispositivoEmitido={} tokenDispositivoExpiraEm={}",
                 loginMascarado,
-                contexto.usuarioId(),
-                statusUsuario,
+                contexto.perfilSistemaId(),
+                statusPerfilSistema,
                 dispositivoRegistrado.tokenDispositivo() != null && !dispositivoRegistrado.tokenDispositivo().isBlank(),
                 dispositivoRegistrado.tokenDispositivoExpiraEm()
         );
@@ -509,7 +519,7 @@ public class FluxoPublicoController {
                 sessao.expiresIn(),
                 dispositivoRegistrado.tokenDispositivo(),
                 dispositivoRegistrado.tokenDispositivoExpiraEm(),
-                statusUsuario,
+                statusPerfilSistema,
                 contexto.emailPrincipal(),
                 false,
                 true,
@@ -618,13 +628,14 @@ public class FluxoPublicoController {
         if (loginNormalizado.contains("@")) {
             return new LoginPublicoResolvido(loginNormalizado, loginNormalizado, Optional.empty());
         }
-        Optional<ContextoPessoaPerfil> contextoPorUsuario = clienteContextoPessoaPerfil.buscarPorUsuario(loginNormalizado);
-        String loginCanonico = contextoPorUsuario
-                .map(ContextoPessoaPerfil::emailPrincipal)
+        Optional<ContextoPessoaPerfilSistema> contextoPorIdentificadorPublicoSistema =
+                clienteContextoPessoaPerfilSistema.buscarPorIdentificadorPublicoSistema(loginNormalizado);
+        String loginCanonico = contextoPorIdentificadorPublicoSistema
+                .map(ContextoPessoaPerfilSistema::emailPrincipal)
                 .map(email -> email == null ? null : email.trim().toLowerCase(Locale.ROOT))
                 .filter(email -> !email.isBlank())
                 .orElse(loginNormalizado);
-        return new LoginPublicoResolvido(loginNormalizado, loginCanonico, contextoPorUsuario);
+        return new LoginPublicoResolvido(loginNormalizado, loginCanonico, contextoPorIdentificadorPublicoSistema);
     }
 
     @PostMapping("/sessoes/refresh")
@@ -948,6 +959,6 @@ public class FluxoPublicoController {
     private record LoginPublicoResolvido(
             String loginOriginal,
             String loginCanonico,
-            Optional<ContextoPessoaPerfil> contextoResolvido) {
+            Optional<ContextoPessoaPerfilSistema> contextoResolvido) {
     }
 }

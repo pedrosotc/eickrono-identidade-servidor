@@ -1,5 +1,6 @@
 package com.eickrono.api.identidade.aplicacao.servico;
 
+import com.eickrono.api.identidade.aplicacao.excecao.ApiAutenticadaException;
 import com.eickrono.api.identidade.aplicacao.modelo.IdentidadeFederadaKeycloak;
 import com.eickrono.api.identidade.dominio.modelo.ProvedorVinculoSocial;
 import java.nio.charset.StandardCharsets;
@@ -10,6 +11,7 @@ import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -112,14 +114,12 @@ public class AvatarSocialProjetoJdbc {
                             EXCLUDED.nome_exibicao_externo,
                             autenticacao.usuarios_formas_acesso.nome_exibicao_externo
                         ),
-                        url_avatar_externo = COALESCE(
-                            EXCLUDED.url_avatar_externo,
-                            autenticacao.usuarios_formas_acesso.url_avatar_externo
-                        ),
-                        avatar_externo_atualizado_em = COALESCE(
-                            EXCLUDED.avatar_externo_atualizado_em,
-                            autenticacao.usuarios_formas_acesso.avatar_externo_atualizado_em
-                        )
+                        url_avatar_externo = EXCLUDED.url_avatar_externo,
+                        avatar_externo_atualizado_em = CASE
+                            WHEN EXCLUDED.url_avatar_externo IS NULL
+                                THEN autenticacao.usuarios_formas_acesso.avatar_externo_atualizado_em
+                            ELSE EXCLUDED.avatar_externo_atualizado_em
+                        END
                     """, params);
         }
 
@@ -197,23 +197,26 @@ public class AvatarSocialProjetoJdbc {
                 (rs, rowNum) -> UUID.fromString(rs.getString("id")))
                 .stream()
                 .findFirst()
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.CONFLICT,
-                        "A rede social informada ainda nao possui avatar sincronizado para este usuario."
+                .orElseThrow(() -> ApiAutenticadaException.conflito(
+                        "avatar_social_indisponivel",
+                        "A rede social informada ainda nao possui foto disponivel para este projeto.",
+                        Map.of("provedor", provedor.getAliasApi())
                 ));
-        String urlAvatar = jdbcTemplate.query("""
+        List<String> urlsAvatar = jdbcTemplate.query("""
                 SELECT url_avatar_externo
                 FROM autenticacao.usuarios_formas_acesso
                 WHERE id = :formaAcessoId
                 """,
                 new MapSqlParameterSource("formaAcessoId", formaAcessoId),
-                (rs, rowNum) -> normalizarOpcional(rs.getString("url_avatar_externo")))
-                .stream()
-                .findFirst()
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.CONFLICT,
-                        "Nao foi possivel localizar o avatar da rede social selecionada."
-                ));
+                (rs, rowNum) -> normalizarOpcional(rs.getString("url_avatar_externo")));
+        String urlAvatar = urlsAvatar.isEmpty() ? null : urlsAvatar.getFirst();
+        if (urlAvatar == null) {
+            throw ApiAutenticadaException.conflito(
+                    "avatar_social_indisponivel",
+                    "A rede social informada ainda nao possui foto disponivel para este projeto.",
+                    Map.of("provedor", provedor.getAliasApi())
+            );
+        }
         assegurarVinculoProjeto(
                 usuarioId,
                 Objects.requireNonNull(subRemoto, "subRemoto é obrigatório"),
@@ -445,6 +448,8 @@ public class AvatarSocialProjetoJdbc {
                       FROM autenticacao.usuarios_formas_acesso ufa
                       WHERE ufa.id = uce.avatar_preferido_forma_acesso_id
                         AND ufa.desvinculado_em IS NULL
+                        AND ufa.url_avatar_externo IS NOT NULL
+                        AND btrim(ufa.url_avatar_externo) <> ''
                   )
                 """,
                 new MapSqlParameterSource()

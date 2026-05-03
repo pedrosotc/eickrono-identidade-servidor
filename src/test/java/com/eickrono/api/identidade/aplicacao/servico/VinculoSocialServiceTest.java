@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -547,6 +548,126 @@ class VinculoSocialServiceTest {
                 .orElseThrow();
         assertThat(google.avatarPrincipalNoProjeto()).isTrue();
         assertThat(google.urlAvatarExterno()).isEqualTo("https://cdn.eickrono.test/google.png");
+    }
+
+    @Test
+    @DisplayName("sincronizar vínculos sociais: deve manter o vínculo mesmo quando o provedor não informar foto")
+    void deveSincronizarVinculoSocialSemFotoDisponivel() throws Exception {
+        inicializarServico();
+        PerfilIdentidade perfil = criarPerfil();
+        Pessoa pessoa = criarPessoa();
+        Jwt jwt = jwt("sub-123");
+        when(provisionamentoIdentidadeService.provisionarOuAtualizar(jwt)).thenReturn(pessoa);
+        when(perfilRepositorio.findBySub("sub-123")).thenReturn(Optional.of(perfil));
+
+        clienteAdministracaoVinculosSociaisKeycloak.definir(
+                "sub-123",
+                List.of(new IdentidadeFederadaKeycloak(
+                        ProvedorVinculoSocial.GOOGLE,
+                        "google-sub-1",
+                        "teste@gmail.com",
+                        "Pessoa Google",
+                        null)));
+
+        VinculosSociaisDto resposta = vinculoSocialService.sincronizar(
+                jwt,
+                "google",
+                null,
+                "eickrono-thimisu-app");
+
+        VinculoSocialDto google = resposta.provedores().stream()
+                .filter(item -> item.provedor().equals("google"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(google.vinculado()).isTrue();
+        assertThat(google.urlAvatarExterno()).isNull();
+        assertThat(google.avatarPrincipalNoProjeto()).isFalse();
+        assertThat(google.statusAvatarSocial()).isEqualTo("FOTO_NAO_DISPONIVEL");
+        assertThat(google.mensagemAvatarSocial())
+                .isEqualTo("Esta conta esta vinculada, mas nao ha foto disponivel para usar no perfil neste momento.");
+        assertThat(vinculosPersistidos.getFirst().getUrlAvatarExterno()).isNull();
+        assertThat(formasAcessoPersistidas.getFirst().getUrlAvatarExterno()).isNull();
+    }
+
+    @Test
+    @DisplayName("sincronizar vínculos sociais: deve manter o vínculo da Apple mesmo quando o provedor não informar foto")
+    void deveSincronizarVinculoAppleSemFotoDisponivel() throws Exception {
+        inicializarServico();
+        PerfilIdentidade perfil = criarPerfil();
+        Pessoa pessoa = criarPessoa();
+        Jwt jwt = jwt("sub-123");
+        when(provisionamentoIdentidadeService.provisionarOuAtualizar(jwt)).thenReturn(pessoa);
+        when(perfilRepositorio.findBySub("sub-123")).thenReturn(Optional.of(perfil));
+
+        clienteAdministracaoVinculosSociaisKeycloak.definir(
+                "sub-123",
+                List.of(new IdentidadeFederadaKeycloak(
+                        ProvedorVinculoSocial.APPLE,
+                        "apple-sub-1",
+                        "usuario@icloud.test",
+                        "Pessoa Apple",
+                        "   ")));
+
+        VinculosSociaisDto resposta = vinculoSocialService.sincronizar(
+                jwt,
+                "apple",
+                null,
+                "eickrono-thimisu-app");
+
+        VinculoSocialDto apple = resposta.provedores().stream()
+                .filter(item -> item.provedor().equals("apple"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(apple.vinculado()).isTrue();
+        assertThat(apple.urlAvatarExterno()).isNull();
+        assertThat(apple.avatarPrincipalNoProjeto()).isFalse();
+        assertThat(apple.statusAvatarSocial()).isEqualTo("PROVEDOR_SEM_SUPORTE_DE_FOTO");
+        assertThat(apple.mensagemAvatarSocial())
+                .isEqualTo("Esta conta esta vinculada, mas este provedor nao disponibiliza foto para uso no perfil neste aplicativo.");
+        assertThat(vinculosPersistidos.getFirst().getProvedor()).isEqualTo("apple");
+        assertThat(vinculosPersistidos.getFirst().getUrlAvatarExterno()).isNull();
+        assertThat(formasAcessoPersistidas.getFirst().getProvedor()).isEqualTo("APPLE");
+        assertThat(formasAcessoPersistidas.getFirst().getUrlAvatarExterno()).isNull();
+    }
+
+    @Test
+    @DisplayName("atualizar avatar preferido: deve rejeitar quando a rede social não possui foto disponível")
+    void deveRejeitarAvatarPreferidoSocialSemFotoDisponivel() throws Exception {
+        inicializarServico();
+        Jwt jwt = jwt("sub-123");
+        doThrow(ApiAutenticadaException.conflito(
+                "avatar_social_indisponivel",
+                "A rede social informada ainda nao possui foto disponivel para este projeto.",
+                Map.of("provedor", "google")))
+                .when(avatarSocialProjetoJdbc)
+                .definirAvatarSocial(eq("sub-123"), eq(1L), eq(ProvedorVinculoSocial.GOOGLE), any());
+
+        assertThatThrownBy(() -> vinculoSocialService.atualizarAvatarPreferido(
+                jwt,
+                new AtualizarAvatarPreferidoApiRequest("eickrono-thimisu-app", "SOCIAL", "google", null)))
+                .isInstanceOf(ApiAutenticadaException.class)
+                .extracting("codigo")
+                .isEqualTo("avatar_social_indisponivel");
+    }
+
+    @Test
+    @DisplayName("atualizar avatar preferido: deve rejeitar Apple quando a rede social não possui foto disponível")
+    void deveRejeitarAvatarPreferidoAppleSemFotoDisponivel() throws Exception {
+        inicializarServico();
+        Jwt jwt = jwt("sub-123");
+        doThrow(ApiAutenticadaException.conflito(
+                "avatar_social_indisponivel",
+                "A rede social informada ainda nao possui foto disponivel para este projeto.",
+                Map.of("provedor", "apple")))
+                .when(avatarSocialProjetoJdbc)
+                .definirAvatarSocial(eq("sub-123"), eq(1L), eq(ProvedorVinculoSocial.APPLE), any());
+
+        assertThatThrownBy(() -> vinculoSocialService.atualizarAvatarPreferido(
+                jwt,
+                new AtualizarAvatarPreferidoApiRequest("eickrono-thimisu-app", "SOCIAL", "apple", null)))
+                .isInstanceOf(ApiAutenticadaException.class)
+                .extracting("codigo")
+                .isEqualTo("avatar_social_indisponivel");
     }
 
     private void inicializarServico() {

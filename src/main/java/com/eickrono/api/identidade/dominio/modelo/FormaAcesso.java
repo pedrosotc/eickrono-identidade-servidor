@@ -137,10 +137,18 @@ public class FormaAcesso {
         if (nomeExibicaoExterno != null && !nomeExibicaoExterno.isBlank()) {
             this.nomeExibicaoExterno = nomeExibicaoExterno.trim();
         }
-        if (urlAvatarExterno != null && !urlAvatarExterno.isBlank()) {
-            this.urlAvatarExterno = urlAvatarExterno.trim();
-            this.avatarExternoAtualizadoEm = Objects.requireNonNull(
-                    atualizadoEm, "atualizadoEm é obrigatório");
+        String urlNormalizada = normalizarOpcional(urlAvatarExterno);
+        this.urlAvatarExterno = urlNormalizada;
+        if (urlNormalizada != null) {
+            this.avatarExternoAtualizadoEm = Objects.requireNonNull(atualizadoEm, "atualizadoEm é obrigatório");
         }
+    }
+
+    private String normalizarOpcional(final String valor) {
+        if (valor == null) {
+            return null;
+        }
+        String texto = valor.trim();
+        return texto.isEmpty() ? null : texto;
     }
 }

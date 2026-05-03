@@ -19,14 +19,14 @@ import com.eickrono.api.identidade.aplicacao.servico.AtestacaoAppServico;
 import com.eickrono.api.identidade.aplicacao.servico.AvaliacaoSegurancaAplicativoService;
 import com.eickrono.api.identidade.aplicacao.servico.AutenticacaoSessaoInternaServico;
 import com.eickrono.api.identidade.aplicacao.servico.CadastroContaInternaServico;
-import com.eickrono.api.identidade.aplicacao.servico.ClienteContextoPessoaPerfil;
+import com.eickrono.api.identidade.aplicacao.servico.ClienteContextoPessoaPerfilSistema;
 import com.eickrono.api.identidade.aplicacao.servico.ContextoSocialPendenteJdbc;
 import com.eickrono.api.identidade.aplicacao.servico.ConviteOrganizacionalService;
 import com.eickrono.api.identidade.aplicacao.servico.RecuperacaoSenhaService;
 import com.eickrono.api.identidade.aplicacao.servico.RegistroDispositivoLoginSilenciosoService;
 import com.eickrono.api.identidade.aplicacao.servico.ResolvedorProjetoFluxoPublicoJdbc;
 import com.eickrono.api.identidade.aplicacao.modelo.DispositivoSessaoRegistrado;
-import com.eickrono.api.identidade.aplicacao.modelo.ContextoPessoaPerfil;
+import com.eickrono.api.identidade.aplicacao.modelo.ContextoPessoaPerfilSistema;
 import com.eickrono.api.identidade.aplicacao.modelo.RecuperacaoSenhaIniciada;
 import com.eickrono.api.identidade.aplicacao.modelo.VinculoSocialPendenteCadastro;
 import com.eickrono.api.identidade.aplicacao.modelo.StatusCadastroPublico;
@@ -79,7 +79,7 @@ class FluxoPublicoControllerIT {
     private AutenticacaoSessaoInternaServico autenticacaoSessaoInternaServico;
 
     @MockBean
-    private ClienteContextoPessoaPerfil clienteContextoPessoaPerfil;
+    private ClienteContextoPessoaPerfilSistema clienteContextoPessoaPerfilSistema;
 
     @MockBean
     private RecuperacaoSenhaService recuperacaoSenhaService;
@@ -139,15 +139,23 @@ class FluxoPublicoControllerIT {
 
     @Test
     void deveConsultarDisponibilidadePublicaDoUsuario() throws Exception {
-        when(cadastroContaInternaServico.usuarioDisponivelPublico("ana.souza")).thenReturn(false);
+        when(cadastroContaInternaServico.identificadorPublicoSistemaDisponivelPublico(
+                "ana.souza",
+                "eickrono-thimisu-app"
+        ))
+                .thenReturn(false);
 
         mockMvc.perform(get("/api/publica/cadastros/usuarios/disponibilidade")
-                        .param("usuario", " Ana.Souza "))
+                        .param("usuario", " Ana.Souza ")
+                        .param("aplicacaoId", " Eickrono-Thimisu-App "))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.usuario").value("ana.souza"))
                 .andExpect(jsonPath("$.disponivel").value(false));
 
-        verify(cadastroContaInternaServico).usuarioDisponivelPublico("ana.souza");
+        verify(cadastroContaInternaServico).identificadorPublicoSistemaDisponivelPublico(
+                "ana.souza",
+                "eickrono-thimisu-app"
+        );
     }
 
     @Test
@@ -492,8 +500,8 @@ class FluxoPublicoControllerIT {
 
     @Test
     void deveAceitarLoginPublicoComUsuarioEAutenticarNoKeycloakComEmailCanonico() throws Exception {
-        when(clienteContextoPessoaPerfil.buscarPorUsuario("ana.souza"))
-                .thenReturn(Optional.of(new ContextoPessoaPerfil(
+        when(clienteContextoPessoaPerfilSistema.buscarPorIdentificadorPublicoSistema("ana.souza"))
+                .thenReturn(Optional.of(new ContextoPessoaPerfilSistema(
                         10L,
                         "sub-ana-souza",
                         "ana@eickrono.com",
@@ -557,9 +565,9 @@ class FluxoPublicoControllerIT {
                 .andExpect(jsonPath("$.statusUsuario").value("LIBERADO"))
                 .andExpect(jsonPath("$.tokenDispositivo").value("device-token-teste"));
 
-        verify(clienteContextoPessoaPerfil).buscarPorUsuario("ana.souza");
+        verify(clienteContextoPessoaPerfilSistema).buscarPorIdentificadorPublicoSistema("ana.souza");
         verify(autenticacaoSessaoInternaServico).autenticar("ana@eickrono.com", "SenhaForte123");
-        verify(clienteContextoPessoaPerfil)
+        verify(clienteContextoPessoaPerfilSistema)
                 .buscarPorEmail(argThat(email -> "ana@eickrono.com".equalsIgnoreCase(email)));
     }
 
@@ -1337,8 +1345,8 @@ class FluxoPublicoControllerIT {
                         "refresh-token",
                         3600
                 ));
-        when(clienteContextoPessoaPerfil.buscarPorEmail("a@a.com"))
-                .thenReturn(Optional.of(new ContextoPessoaPerfil(
+        when(clienteContextoPessoaPerfilSistema.buscarPorEmail("a@a.com"))
+                .thenReturn(Optional.of(new ContextoPessoaPerfilSistema(
                         10L,
                         "sub-123",
                         "a@a.com",

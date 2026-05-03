@@ -22,9 +22,9 @@ import com.eickrono.api.identidade.aplicacao.modelo.ConviteOrganizacionalValidad
 import com.eickrono.api.identidade.aplicacao.modelo.ContextoSolicitacaoFluxoPublico;
 import com.eickrono.api.identidade.aplicacao.modelo.IdentidadeFederadaKeycloak;
 import com.eickrono.api.identidade.aplicacao.modelo.ProjetoFluxoPublicoResolvido;
-import com.eickrono.api.identidade.aplicacao.modelo.ProvisionamentoPerfilRealizado;
+import com.eickrono.api.identidade.aplicacao.modelo.ProvisionamentoPerfilSistemaRealizado;
 import com.eickrono.api.identidade.aplicacao.modelo.VinculoSocialPendenteCadastro;
-import com.eickrono.api.identidade.aplicacao.modelo.ContextoPessoaPerfil;
+import com.eickrono.api.identidade.aplicacao.modelo.ContextoPessoaPerfilSistema;
 import com.eickrono.api.identidade.dominio.modelo.CanalValidacaoTelefoneCadastro;
 import com.eickrono.api.identidade.dominio.modelo.CadastroConta;
 import com.eickrono.api.identidade.dominio.modelo.FormaAcesso;
@@ -60,6 +60,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.server.ResponseStatusException;
@@ -110,10 +111,13 @@ class CadastroContaInternaServicoTest {
     private AuditoriaService auditoriaService;
 
     @Mock
-    private ClienteContextoPessoaPerfil clienteContextoPessoaPerfil;
+    private ClienteContextoPessoaPerfilSistema clienteContextoPessoaPerfilSistema;
 
     @Mock
-    private ProvisionadorPerfilDominioServico provisionadorPerfilDominioServico;
+    private ProvisionadorPerfilSistemaServico provisionadorPerfilSistemaServico;
+
+    @Mock
+    private ConsultadorDisponibilidadeUsuarioSistemaServico consultadorDisponibilidadeUsuarioSistemaServico;
 
     @Captor
     private ArgumentCaptor<CadastroConta> cadastroCaptor;
@@ -165,7 +169,7 @@ class CadastroContaInternaServicoTest {
         servicoPublico = new CadastroContaInternaServico(
                 cadastroContaRepositorio,
                 recuperacaoSenhaRepositorio,
-                clienteContextoPessoaPerfil,
+                clienteContextoPessoaPerfilSistema,
                 clienteAdministracaoCadastroKeycloak,
                 pessoaRepositorio,
                 perfilIdentidadeRepositorio,
@@ -173,7 +177,9 @@ class CadastroContaInternaServicoTest {
                 vinculoSocialRepositorio,
                 conviteOrganizacionalRepositorio,
                 vinculoOrganizacionalRepositorio,
-                provisionadorPerfilDominioServico,
+                provisionadorPerfilSistemaServico,
+                consultadorDisponibilidadeUsuarioSistemaServico,
+                provisionamentoIdentidadeService,
                 canalEnvioCodigoCadastroEmail,
                 canalEnvioCodigoCadastroTelefone,
                 canalNotificacaoTentativaCadastroEmail,
@@ -195,13 +201,21 @@ class CadastroContaInternaServicoTest {
         return dispositivoProperties;
     }
 
+    private Pessoa pessoaCanonica(final String sub, final String email, final String nome, final Long id) {
+        Pessoa pessoa = org.mockito.Mockito.mock(Pessoa.class);
+        when(pessoa.getId()).thenReturn(id);
+        return pessoa;
+    }
+
     @Test
     @DisplayName("deve persistir locale, timeZone e contexto de exibicao no cadastro publico")
     void devePersistirContextoInformadoNoCadastroPublico() {
         when(cadastroContaRepositorio.findByEmailPrincipal("ana@eickrono.com")).thenReturn(Optional.empty());
-        when(cadastroContaRepositorio.findByUsuarioIgnoreCase("ana.souza")).thenReturn(Optional.empty());
-        when(clienteContextoPessoaPerfil.buscarPorEmail("ana@eickrono.com")).thenReturn(Optional.empty());
-        when(provisionadorPerfilDominioServico.usuarioDisponivel("ana.souza")).thenReturn(true);
+        when(cadastroContaRepositorio.findByUsuarioIgnoreCaseAndSistemaSolicitanteIgnoreCase(
+                eq("ana.souza"),
+                anyString())).thenReturn(Optional.empty());
+        when(clienteContextoPessoaPerfilSistema.buscarPorEmail("ana@eickrono.com")).thenReturn(Optional.empty());
+        when(consultadorDisponibilidadeUsuarioSistemaServico.usuarioDisponivel(eq("ana.souza"), anyString())).thenReturn(true);
         when(clienteAdministracaoCadastroKeycloak.criarUsuarioPendente(
                 "Ana Souza", "ana@eickrono.com", "SenhaForte@123"))
                 .thenReturn(new CadastroKeycloakProvisionado("sub-ana", "ana@eickrono.com", "Ana Souza"));
@@ -258,7 +272,7 @@ class CadastroContaInternaServicoTest {
 
         CadastroContaInternaServico servicoProjetoSemTelefone = new CadastroContaInternaServico(
                 cadastroContaRepositorio,
-                clienteContextoPessoaPerfil,
+                clienteContextoPessoaPerfilSistema,
                 clienteAdministracaoCadastroKeycloak,
                 pessoaRepositorio,
                 perfilIdentidadeRepositorio,
@@ -266,7 +280,9 @@ class CadastroContaInternaServicoTest {
                 vinculoSocialRepositorio,
                 conviteOrganizacionalRepositorio,
                 vinculoOrganizacionalRepositorio,
-                provisionadorPerfilDominioServico,
+                provisionadorPerfilSistemaServico,
+                consultadorDisponibilidadeUsuarioSistemaServico,
+                provisionamentoIdentidadeService,
                 canalEnvioCodigoCadastroEmail,
                 canalEnvioCodigoCadastroTelefone,
                 canalNotificacaoTentativaCadastroEmail,
@@ -288,9 +304,11 @@ class CadastroContaInternaServicoTest {
 
         AtomicReference<CadastroConta> salvo = new AtomicReference<>();
         when(cadastroContaRepositorio.findByEmailPrincipal("ana@eickrono.com")).thenReturn(Optional.empty());
-        when(cadastroContaRepositorio.findByUsuarioIgnoreCase("ana.souza")).thenReturn(Optional.empty());
-        when(clienteContextoPessoaPerfil.buscarPorEmail("ana@eickrono.com")).thenReturn(Optional.empty());
-        when(provisionadorPerfilDominioServico.usuarioDisponivel("ana.souza")).thenReturn(true);
+        when(cadastroContaRepositorio.findByUsuarioIgnoreCaseAndSistemaSolicitanteIgnoreCase(
+                eq("ana.souza"),
+                anyString())).thenReturn(Optional.empty());
+        when(clienteContextoPessoaPerfilSistema.buscarPorEmail("ana@eickrono.com")).thenReturn(Optional.empty());
+        when(consultadorDisponibilidadeUsuarioSistemaServico.usuarioDisponivel(eq("ana.souza"), anyString())).thenReturn(true);
         when(clienteAdministracaoCadastroKeycloak.criarUsuarioPendente(
                 "Ana Souza", "ana@eickrono.com", "SenhaForte@123"))
                 .thenReturn(new CadastroKeycloakProvisionado("sub-ana", "ana@eickrono.com", "Ana Souza"));
@@ -299,9 +317,16 @@ class CadastroContaInternaServicoTest {
             salvo.set(cadastro);
             return cadastro;
         });
-        when(provisionadorPerfilDominioServico.provisionarCadastroConfirmado(any(CadastroConta.class)))
-                .thenReturn(new com.eickrono.api.identidade.aplicacao.modelo.ProvisionamentoPerfilRealizado(
-                        10L,
+        Pessoa pessoaCanonica = pessoaCanonica("sub-ana", "ana@eickrono.com", "Ana Souza", 77L);
+        when(provisionamentoIdentidadeService.confirmarEmailCadastro(
+                eq("sub-ana"),
+                eq("ana@eickrono.com"),
+                eq("Ana Souza"),
+                any()
+        ))
+                .thenReturn(pessoaCanonica);
+        when(provisionadorPerfilSistemaServico.provisionarCadastroConfirmado(any(CadastroConta.class), eq(77L)))
+                .thenReturn(new com.eickrono.api.identidade.aplicacao.modelo.ProvisionamentoPerfilSistemaRealizado(
                         "usuario-001",
                         "LIBERADO"
                 ));
@@ -340,11 +365,23 @@ class CadastroContaInternaServicoTest {
         assertThat(confirmacao.telefoneConfirmado()).isFalse();
         assertThat(confirmacao.podeAutenticar()).isTrue();
         assertThat(confirmacao.proximoPasso()).isEqualTo("LOGIN");
+        assertThat(salvo.get().getPessoaIdPerfil()).isEqualTo(77L);
         verify(clienteAdministracaoCadastroKeycloak).confirmarEmailEAtivarUsuario(
                 eq("sub-ana"),
                 eq("Ana Souza"),
                 isNull()
         );
+        InOrder inOrder = org.mockito.Mockito.inOrder(
+                provisionamentoIdentidadeService,
+                provisionadorPerfilSistemaServico
+        );
+        inOrder.verify(provisionamentoIdentidadeService).confirmarEmailCadastro(
+                eq("sub-ana"),
+                eq("ana@eickrono.com"),
+                eq("Ana Souza"),
+                any()
+        );
+        inOrder.verify(provisionadorPerfilSistemaServico).provisionarCadastroConfirmado(salvo.get(), 77L);
     }
 
     @Test
@@ -395,9 +432,11 @@ class CadastroContaInternaServicoTest {
     @DisplayName("deve traduzir falha de SMTP do cadastro publico para codigo estruturado")
     void deveTraduzirFalhaSmtpDoCadastroPublico() {
         when(cadastroContaRepositorio.findByEmailPrincipal("ana@eickrono.com")).thenReturn(Optional.empty());
-        when(cadastroContaRepositorio.findByUsuarioIgnoreCase("ana.souza")).thenReturn(Optional.empty());
-        when(clienteContextoPessoaPerfil.buscarPorEmail("ana@eickrono.com")).thenReturn(Optional.empty());
-        when(provisionadorPerfilDominioServico.usuarioDisponivel("ana.souza")).thenReturn(true);
+        when(cadastroContaRepositorio.findByUsuarioIgnoreCaseAndSistemaSolicitanteIgnoreCase(
+                eq("ana.souza"),
+                anyString())).thenReturn(Optional.empty());
+        when(clienteContextoPessoaPerfilSistema.buscarPorEmail("ana@eickrono.com")).thenReturn(Optional.empty());
+        when(consultadorDisponibilidadeUsuarioSistemaServico.usuarioDisponivel(eq("ana.souza"), anyString())).thenReturn(true);
         when(clienteAdministracaoCadastroKeycloak.criarUsuarioPendente(
                 "Ana Souza", "ana@eickrono.com", "SenhaForte@123"))
                 .thenReturn(new CadastroKeycloakProvisionado("sub-ana", "ana@eickrono.com", "Ana Souza"));
@@ -448,9 +487,11 @@ class CadastroContaInternaServicoTest {
     @DisplayName("deve traduzir conflito de e-mail do Keycloak para codigo estruturado no cadastro publico")
     void deveTraduzirConflitoEmailDoKeycloakNoCadastroPublico() {
         when(cadastroContaRepositorio.findByEmailPrincipal("ana@eickrono.com")).thenReturn(Optional.empty());
-        when(cadastroContaRepositorio.findByUsuarioIgnoreCase("ana.souza")).thenReturn(Optional.empty());
-        when(clienteContextoPessoaPerfil.buscarPorEmail("ana@eickrono.com")).thenReturn(Optional.empty());
-        when(provisionadorPerfilDominioServico.usuarioDisponivel("ana.souza")).thenReturn(true);
+        when(cadastroContaRepositorio.findByUsuarioIgnoreCaseAndSistemaSolicitanteIgnoreCase(
+                eq("ana.souza"),
+                anyString())).thenReturn(Optional.empty());
+        when(clienteContextoPessoaPerfilSistema.buscarPorEmail("ana@eickrono.com")).thenReturn(Optional.empty());
+        when(consultadorDisponibilidadeUsuarioSistemaServico.usuarioDisponivel(eq("ana.souza"), anyString())).thenReturn(true);
         when(clienteAdministracaoCadastroKeycloak.criarUsuarioPendente(
                 "Ana Souza", "ana@eickrono.com", "SenhaForte@123"))
                 .thenThrow(new ResponseStatusException(
@@ -533,6 +574,7 @@ class CadastroContaInternaServicoTest {
         verify(provisionamentoIdentidadeService).confirmarEmailCadastro(
                 eq("sub-ana"),
                 eq("ana@eickrono.com"),
+                eq("Ana Souza"),
                 any()
         );
     }
@@ -582,10 +624,12 @@ class CadastroContaInternaServicoTest {
     @DisplayName("deve manter o cadastro pendente de telefone quando confirmar apenas o e-mail")
     void deveExigirCodigoTelefoneNaConfirmacaoDoCadastroPublico() {
         AtomicReference<CadastroConta> salvo = new AtomicReference<>();
-        when(cadastroContaRepositorio.findByUsuarioIgnoreCase("ana.souza")).thenReturn(Optional.empty());
-        when(provisionadorPerfilDominioServico.usuarioDisponivel("ana.souza")).thenReturn(true);
+        when(cadastroContaRepositorio.findByUsuarioIgnoreCaseAndSistemaSolicitanteIgnoreCase(
+                eq("ana.souza"),
+                anyString())).thenReturn(Optional.empty());
+        when(consultadorDisponibilidadeUsuarioSistemaServico.usuarioDisponivel(eq("ana.souza"), anyString())).thenReturn(true);
         when(cadastroContaRepositorio.findByEmailPrincipal("ana@eickrono.com")).thenReturn(Optional.empty());
-        when(clienteContextoPessoaPerfil.buscarPorEmail("ana@eickrono.com")).thenReturn(Optional.empty());
+        when(clienteContextoPessoaPerfilSistema.buscarPorEmail("ana@eickrono.com")).thenReturn(Optional.empty());
         when(clienteAdministracaoCadastroKeycloak.criarUsuarioPendente(
                 "Ana Souza", "ana@eickrono.com", "SenhaForte@123"))
                 .thenReturn(new CadastroKeycloakProvisionado("sub-ana", "ana@eickrono.com", "Ana Souza"));
@@ -631,10 +675,12 @@ class CadastroContaInternaServicoTest {
     @DisplayName("deve reenviar tambem o codigo de telefone quando o cadastro possuir telefone principal")
     void deveReenviarTambemCodigoDeTelefoneNoCadastroPublico() {
         AtomicReference<CadastroConta> salvo = new AtomicReference<>();
-        when(cadastroContaRepositorio.findByUsuarioIgnoreCase("ana.souza")).thenReturn(Optional.empty());
-        when(provisionadorPerfilDominioServico.usuarioDisponivel("ana.souza")).thenReturn(true);
+        when(cadastroContaRepositorio.findByUsuarioIgnoreCaseAndSistemaSolicitanteIgnoreCase(
+                eq("ana.souza"),
+                anyString())).thenReturn(Optional.empty());
+        when(consultadorDisponibilidadeUsuarioSistemaServico.usuarioDisponivel(eq("ana.souza"), anyString())).thenReturn(true);
         when(cadastroContaRepositorio.findByEmailPrincipal("ana@eickrono.com")).thenReturn(Optional.empty());
-        when(clienteContextoPessoaPerfil.buscarPorEmail("ana@eickrono.com")).thenReturn(Optional.empty());
+        when(clienteContextoPessoaPerfilSistema.buscarPorEmail("ana@eickrono.com")).thenReturn(Optional.empty());
         when(clienteAdministracaoCadastroKeycloak.criarUsuarioPendente(
                 "Ana Souza", "ana@eickrono.com", "SenhaForte@123"))
                 .thenReturn(new CadastroKeycloakProvisionado("sub-ana", "ana@eickrono.com", "Ana Souza"));
@@ -672,10 +718,12 @@ class CadastroContaInternaServicoTest {
     @DisplayName("deve manter o cadastro em validacao de telefone depois de confirmar apenas o e-mail")
     void deveManterCadastroPendenteTelefoneDepoisDeConfirmarEmail() {
         AtomicReference<CadastroConta> salvo = new AtomicReference<>();
-        when(cadastroContaRepositorio.findByUsuarioIgnoreCase("ana.souza")).thenReturn(Optional.empty());
-        when(provisionadorPerfilDominioServico.usuarioDisponivel("ana.souza")).thenReturn(true);
+        when(cadastroContaRepositorio.findByUsuarioIgnoreCaseAndSistemaSolicitanteIgnoreCase(
+                eq("ana.souza"),
+                anyString())).thenReturn(Optional.empty());
+        when(consultadorDisponibilidadeUsuarioSistemaServico.usuarioDisponivel(eq("ana.souza"), anyString())).thenReturn(true);
         when(cadastroContaRepositorio.findByEmailPrincipal("ana@eickrono.com")).thenReturn(Optional.empty());
-        when(clienteContextoPessoaPerfil.buscarPorEmail("ana@eickrono.com")).thenReturn(Optional.empty());
+        when(clienteContextoPessoaPerfilSistema.buscarPorEmail("ana@eickrono.com")).thenReturn(Optional.empty());
         when(clienteAdministracaoCadastroKeycloak.criarUsuarioPendente(
                 "Ana Souza", "ana@eickrono.com", "SenhaForte@123"))
                 .thenReturn(new CadastroKeycloakProvisionado("sub-ana", "ana@eickrono.com", "Ana Souza"));
@@ -730,10 +778,12 @@ class CadastroContaInternaServicoTest {
     @DisplayName("deve confirmar cadastro publico por telefone depois do e-mail ja confirmado")
     void deveConfirmarCadastroPublicoComTelefoneAposEmail() {
         AtomicReference<CadastroConta> salvo = new AtomicReference<>();
-        when(cadastroContaRepositorio.findByUsuarioIgnoreCase("ana.souza")).thenReturn(Optional.empty());
-        when(provisionadorPerfilDominioServico.usuarioDisponivel("ana.souza")).thenReturn(true);
+        when(cadastroContaRepositorio.findByUsuarioIgnoreCaseAndSistemaSolicitanteIgnoreCase(
+                eq("ana.souza"),
+                anyString())).thenReturn(Optional.empty());
+        when(consultadorDisponibilidadeUsuarioSistemaServico.usuarioDisponivel(eq("ana.souza"), anyString())).thenReturn(true);
         when(cadastroContaRepositorio.findByEmailPrincipal("ana@eickrono.com")).thenReturn(Optional.empty());
-        when(clienteContextoPessoaPerfil.buscarPorEmail("ana@eickrono.com")).thenReturn(Optional.empty());
+        when(clienteContextoPessoaPerfilSistema.buscarPorEmail("ana@eickrono.com")).thenReturn(Optional.empty());
         when(clienteAdministracaoCadastroKeycloak.criarUsuarioPendente(
                 "Ana Souza", "ana@eickrono.com", "SenhaForte@123"))
                 .thenReturn(new CadastroKeycloakProvisionado("sub-ana", "ana@eickrono.com", "Ana Souza"));
@@ -742,9 +792,16 @@ class CadastroContaInternaServicoTest {
             salvo.set(cadastro);
             return cadastro;
         });
-        when(provisionadorPerfilDominioServico.provisionarCadastroConfirmado(any(CadastroConta.class)))
-                .thenReturn(new com.eickrono.api.identidade.aplicacao.modelo.ProvisionamentoPerfilRealizado(
-                        10L,
+        Pessoa pessoaConfirmada = pessoaCanonica("sub-ana", "ana@eickrono.com", "Ana Souza", 10L);
+        when(provisionamentoIdentidadeService.confirmarEmailCadastro(
+                eq("sub-ana"),
+                eq("ana@eickrono.com"),
+                eq("Ana Souza"),
+                any()
+        ))
+                .thenReturn(pessoaConfirmada);
+        when(provisionadorPerfilSistemaServico.provisionarCadastroConfirmado(any(CadastroConta.class), eq(10L)))
+                .thenReturn(new com.eickrono.api.identidade.aplicacao.modelo.ProvisionamentoPerfilSistemaRealizado(
                         "usuario-001",
                         "LIBERADO"
                 ));
@@ -797,8 +854,10 @@ class CadastroContaInternaServicoTest {
     @Test
     @DisplayName("deve rejeitar o cadastro publico quando o usuário já estiver indisponível")
     void deveRejeitarCadastroPublicoComUsuarioIndisponivel() {
-        when(cadastroContaRepositorio.findByUsuarioIgnoreCase("ana.souza")).thenReturn(Optional.empty());
-        when(provisionadorPerfilDominioServico.usuarioDisponivel("ana.souza")).thenReturn(false);
+        when(cadastroContaRepositorio.findByUsuarioIgnoreCaseAndSistemaSolicitanteIgnoreCase(
+                eq("ana.souza"),
+                anyString())).thenReturn(Optional.empty());
+        when(consultadorDisponibilidadeUsuarioSistemaServico.usuarioDisponivel(eq("ana.souza"), anyString())).thenReturn(false);
 
         assertThatThrownBy(() -> servicoPublico().cadastrarPublico(
                 TipoPessoaCadastro.FISICA,
@@ -826,23 +885,33 @@ class CadastroContaInternaServicoTest {
     @Test
     @DisplayName("deve informar a disponibilidade pública do usuário quando ele estiver livre")
     void deveInformarDisponibilidadePublicaDoUsuario() {
-        when(cadastroContaRepositorio.findByUsuarioIgnoreCase("ana.souza")).thenReturn(Optional.empty());
-        when(provisionadorPerfilDominioServico.usuarioDisponivel("ana.souza")).thenReturn(true);
+        when(cadastroContaRepositorio.findByUsuarioIgnoreCaseAndSistemaSolicitanteIgnoreCase(
+                eq("ana.souza"),
+                anyString())).thenReturn(Optional.empty());
+        when(consultadorDisponibilidadeUsuarioSistemaServico.usuarioDisponivel(eq("ana.souza"), anyString())).thenReturn(true);
 
-        boolean disponivel = servicoPublico().usuarioDisponivelPublico(" Ana.Souza ");
+        boolean disponivel = servicoPublico().identificadorPublicoSistemaDisponivelPublico(
+                " Ana.Souza ",
+                " App-Flutter-Publico "
+        );
 
         assertThat(disponivel).isTrue();
-        verify(provisionadorPerfilDominioServico).usuarioDisponivel("ana.souza");
+        verify(consultadorDisponibilidadeUsuarioSistemaServico).usuarioDisponivel(
+                "ana.souza",
+                "app-flutter-publico"
+        );
     }
 
     @Test
     @DisplayName("deve responder com erro estruturado e avisar por e-mail quando já existir conta ativa para o e-mail")
     void deveAvisarPorEmailQuandoJaExistirContaAtivaNoEndereco() {
-        when(cadastroContaRepositorio.findByUsuarioIgnoreCase("ana.souza")).thenReturn(Optional.empty());
-        when(provisionadorPerfilDominioServico.usuarioDisponivel("ana.souza")).thenReturn(true);
+        when(cadastroContaRepositorio.findByUsuarioIgnoreCaseAndSistemaSolicitanteIgnoreCase(
+                eq("ana.souza"),
+                anyString())).thenReturn(Optional.empty());
+        when(consultadorDisponibilidadeUsuarioSistemaServico.usuarioDisponivel(eq("ana.souza"), anyString())).thenReturn(true);
         when(cadastroContaRepositorio.findByEmailPrincipal("ana@eickrono.com")).thenReturn(Optional.empty());
-        when(clienteContextoPessoaPerfil.buscarPorEmail("ana@eickrono.com"))
-                .thenReturn(Optional.of(new ContextoPessoaPerfil(
+        when(clienteContextoPessoaPerfilSistema.buscarPorEmail("ana@eickrono.com"))
+                .thenReturn(Optional.of(new ContextoPessoaPerfilSistema(
                         10L,
                         "sub-ana",
                         "ana@eickrono.com",
@@ -885,10 +954,12 @@ class CadastroContaInternaServicoTest {
     @DisplayName("deve cancelar cadastro pendente publico removendo o usuário pendente do Keycloak")
     void deveCancelarCadastroPendentePublico() {
         AtomicReference<CadastroConta> salvo = new AtomicReference<>();
-        when(cadastroContaRepositorio.findByUsuarioIgnoreCase("ana.souza")).thenReturn(Optional.empty());
-        when(provisionadorPerfilDominioServico.usuarioDisponivel("ana.souza")).thenReturn(true);
+        when(cadastroContaRepositorio.findByUsuarioIgnoreCaseAndSistemaSolicitanteIgnoreCase(
+                eq("ana.souza"),
+                anyString())).thenReturn(Optional.empty());
+        when(consultadorDisponibilidadeUsuarioSistemaServico.usuarioDisponivel(eq("ana.souza"), anyString())).thenReturn(true);
         when(cadastroContaRepositorio.findByEmailPrincipal("ana@eickrono.com")).thenReturn(Optional.empty());
-        when(clienteContextoPessoaPerfil.buscarPorEmail("ana@eickrono.com")).thenReturn(Optional.empty());
+        when(clienteContextoPessoaPerfilSistema.buscarPorEmail("ana@eickrono.com")).thenReturn(Optional.empty());
         when(clienteAdministracaoCadastroKeycloak.criarUsuarioPendente(
                 "Ana Souza", "ana@eickrono.com", "SenhaForte@123"))
                 .thenReturn(new CadastroKeycloakProvisionado("sub-ana", "ana@eickrono.com", "Ana Souza"));
@@ -925,10 +996,12 @@ class CadastroContaInternaServicoTest {
     @Test
     @DisplayName("deve persistir o vínculo social pendente no cadastro público")
     void devePersistirVinculoSocialPendenteNoCadastroPublico() {
-        when(cadastroContaRepositorio.findByUsuarioIgnoreCase("ana.souza")).thenReturn(Optional.empty());
-        when(provisionadorPerfilDominioServico.usuarioDisponivel("ana.souza")).thenReturn(true);
+        when(cadastroContaRepositorio.findByUsuarioIgnoreCaseAndSistemaSolicitanteIgnoreCase(
+                eq("ana.souza"),
+                anyString())).thenReturn(Optional.empty());
+        when(consultadorDisponibilidadeUsuarioSistemaServico.usuarioDisponivel(eq("ana.souza"), anyString())).thenReturn(true);
         when(cadastroContaRepositorio.findByEmailPrincipal("ana@eickrono.com")).thenReturn(Optional.empty());
-        when(clienteContextoPessoaPerfil.buscarPorEmail("ana@eickrono.com")).thenReturn(Optional.empty());
+        when(clienteContextoPessoaPerfilSistema.buscarPorEmail("ana@eickrono.com")).thenReturn(Optional.empty());
         when(clienteAdministracaoCadastroKeycloak.criarUsuarioPendente(
                 "Ana Souza", "ana@eickrono.com", "SenhaForte@123"))
                 .thenReturn(new CadastroKeycloakProvisionado("sub-ana", "ana@eickrono.com", "Ana Souza"));
@@ -966,10 +1039,12 @@ class CadastroContaInternaServicoTest {
     @Test
     @DisplayName("deve persistir o contexto do convite organizacional no cadastro público")
     void devePersistirContextoDoConviteOrganizacionalNoCadastroPublico() {
-        when(cadastroContaRepositorio.findByUsuarioIgnoreCase("jane.doe")).thenReturn(Optional.empty());
-        when(provisionadorPerfilDominioServico.usuarioDisponivel("jane.doe")).thenReturn(true);
+        when(cadastroContaRepositorio.findByUsuarioIgnoreCaseAndSistemaSolicitanteIgnoreCase(
+                eq("jane.doe"),
+                anyString())).thenReturn(Optional.empty());
+        when(consultadorDisponibilidadeUsuarioSistemaServico.usuarioDisponivel(eq("jane.doe"), anyString())).thenReturn(true);
         when(cadastroContaRepositorio.findByEmailPrincipal("convite@acme.test")).thenReturn(Optional.empty());
-        when(clienteContextoPessoaPerfil.buscarPorEmail("convite@acme.test")).thenReturn(Optional.empty());
+        when(clienteContextoPessoaPerfilSistema.buscarPorEmail("convite@acme.test")).thenReturn(Optional.empty());
         when(clienteAdministracaoCadastroKeycloak.criarUsuarioPendente(
                 "Jane Doe", "convite@acme.test", "SenhaForte@123"))
                 .thenReturn(new CadastroKeycloakProvisionado("sub-jane", "convite@acme.test", "Jane Doe"));
@@ -1016,10 +1091,12 @@ class CadastroContaInternaServicoTest {
     @DisplayName("deve materializar vinculo organizacional e consumir convite ao confirmar cadastro público")
     void deveMaterializarVinculoOrganizacionalEConsumirConviteAoConfirmarCadastroPublico() {
         AtomicReference<CadastroConta> salvo = new AtomicReference<>();
-        when(cadastroContaRepositorio.findByUsuarioIgnoreCase("jane.doe")).thenReturn(Optional.empty());
-        when(provisionadorPerfilDominioServico.usuarioDisponivel("jane.doe")).thenReturn(true);
+        when(cadastroContaRepositorio.findByUsuarioIgnoreCaseAndSistemaSolicitanteIgnoreCase(
+                eq("jane.doe"),
+                anyString())).thenReturn(Optional.empty());
+        when(consultadorDisponibilidadeUsuarioSistemaServico.usuarioDisponivel(eq("jane.doe"), anyString())).thenReturn(true);
         when(cadastroContaRepositorio.findByEmailPrincipal("convite@acme.test")).thenReturn(Optional.empty());
-        when(clienteContextoPessoaPerfil.buscarPorEmail("convite@acme.test")).thenReturn(Optional.empty());
+        when(clienteContextoPessoaPerfilSistema.buscarPorEmail("convite@acme.test")).thenReturn(Optional.empty());
         when(clienteAdministracaoCadastroKeycloak.criarUsuarioPendente(
                 "Jane Doe", "convite@acme.test", "SenhaForte@123"))
                 .thenReturn(new CadastroKeycloakProvisionado("sub-jane", "convite@acme.test", "Jane Doe"));
@@ -1028,7 +1105,7 @@ class CadastroContaInternaServicoTest {
             salvo.set(cadastro);
             return cadastro;
         });
-        when(vinculoOrganizacionalRepositorio.findByOrganizacaoIdAndUsuarioIdPerfil("org-acme", "usuario-001"))
+        when(vinculoOrganizacionalRepositorio.findByOrganizacaoIdAndPerfilSistemaId("org-acme", "usuario-001"))
                 .thenReturn(Optional.empty());
         when(vinculoOrganizacionalRepositorio.save(any(VinculoOrganizacional.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -1045,9 +1122,16 @@ class CadastroContaInternaServicoTest {
                 .thenReturn(Optional.of(convite));
         when(conviteOrganizacionalRepositorio.save(any(ConviteOrganizacional.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
-        when(provisionadorPerfilDominioServico.provisionarCadastroConfirmado(any(CadastroConta.class)))
-                .thenReturn(new ProvisionamentoPerfilRealizado(
-                        10L,
+        Pessoa pessoaConfirmada = pessoaCanonica("sub-jane", "convite@acme.test", "Jane Doe", 10L);
+        when(provisionamentoIdentidadeService.confirmarEmailCadastro(
+                eq("sub-jane"),
+                eq("convite@acme.test"),
+                eq("Jane Doe"),
+                any()
+        ))
+                .thenReturn(pessoaConfirmada);
+        when(provisionadorPerfilSistemaServico.provisionarCadastroConfirmado(any(CadastroConta.class), eq(10L)))
+                .thenReturn(new ProvisionamentoPerfilSistemaRealizado(
                         "usuario-001",
                         "LIBERADO"
                 ));
@@ -1095,7 +1179,7 @@ class CadastroContaInternaServicoTest {
         VinculoOrganizacional vinculo = vinculoOrganizacionalCaptor.getValue();
         assertThat(vinculo.getCadastroId()).isEqualTo(cadastro.cadastroId());
         assertThat(vinculo.getPessoaIdPerfil()).isEqualTo(10L);
-        assertThat(vinculo.getUsuarioIdPerfil()).isEqualTo("usuario-001");
+        assertThat(vinculo.getPerfilSistemaId()).isEqualTo("usuario-001");
         assertThat(vinculo.getOrganizacaoId()).isEqualTo("org-acme");
         assertThat(vinculo.getConviteCodigo()).isEqualTo("ORG-ACME-2026");
         assertThat(vinculo.isExigeContaSeparada()).isTrue();
@@ -1108,10 +1192,12 @@ class CadastroContaInternaServicoTest {
     @DisplayName("deve vincular a identidade federada ao confirmar o e-mail do cadastro público")
     void deveVincularIdentidadeFederadaAoConfirmarEmailDoCadastroPublico() {
         AtomicReference<CadastroConta> salvo = new AtomicReference<>();
-        when(cadastroContaRepositorio.findByUsuarioIgnoreCase("ana.souza")).thenReturn(Optional.empty());
-        when(provisionadorPerfilDominioServico.usuarioDisponivel("ana.souza")).thenReturn(true);
+        when(cadastroContaRepositorio.findByUsuarioIgnoreCaseAndSistemaSolicitanteIgnoreCase(
+                eq("ana.souza"),
+                anyString())).thenReturn(Optional.empty());
+        when(consultadorDisponibilidadeUsuarioSistemaServico.usuarioDisponivel(eq("ana.souza"), anyString())).thenReturn(true);
         when(cadastroContaRepositorio.findByEmailPrincipal("ana@eickrono.com")).thenReturn(Optional.empty());
-        when(clienteContextoPessoaPerfil.buscarPorEmail("ana@eickrono.com")).thenReturn(Optional.empty());
+        when(clienteContextoPessoaPerfilSistema.buscarPorEmail("ana@eickrono.com")).thenReturn(Optional.empty());
         Pessoa pessoa = new Pessoa("sub-ana", "ana@eickrono.com", "Ana Souza", java.util.Set.of(), java.util.Set.of(),
                 OffsetDateTime.parse("2026-03-19T10:00:00Z"));
         org.springframework.test.util.ReflectionTestUtils.setField(pessoa, "id", 10L);
@@ -1138,9 +1224,16 @@ class CadastroContaInternaServicoTest {
                 "google-user-123")).thenReturn(Optional.empty());
         when(formaAcessoRepositorio.findByPessoa(pessoa)).thenReturn(List.of());
         when(vinculoSocialRepositorio.findByPerfil(perfil)).thenReturn(List.of());
-        when(provisionadorPerfilDominioServico.provisionarCadastroConfirmado(any(CadastroConta.class)))
-                .thenReturn(new com.eickrono.api.identidade.aplicacao.modelo.ProvisionamentoPerfilRealizado(
-                        10L,
+        Pessoa pessoaConfirmada = pessoaCanonica("sub-ana", "ana@eickrono.com", "Ana Souza", 10L);
+        when(provisionamentoIdentidadeService.confirmarEmailCadastro(
+                eq("sub-ana"),
+                eq("ana@eickrono.com"),
+                eq("Ana Souza"),
+                any()
+        ))
+                .thenReturn(pessoaConfirmada);
+        when(provisionadorPerfilSistemaServico.provisionarCadastroConfirmado(any(CadastroConta.class), eq(10L)))
+                .thenReturn(new com.eickrono.api.identidade.aplicacao.modelo.ProvisionamentoPerfilSistemaRealizado(
                         "usuario-001",
                         "LIBERADO"
                 ));

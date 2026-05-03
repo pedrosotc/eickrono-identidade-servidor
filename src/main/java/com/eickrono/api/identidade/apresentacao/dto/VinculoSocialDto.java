@@ -14,5 +14,7 @@ public record VinculoSocialDto(
         String nomeExibicaoExterno,
         String urlAvatarExterno,
         OffsetDateTime avatarExternoAtualizadoEm,
-        boolean avatarPrincipalNoProjeto) {
+        boolean avatarPrincipalNoProjeto,
+        String statusAvatarSocial,
+        String mensagemAvatarSocial) {
 }

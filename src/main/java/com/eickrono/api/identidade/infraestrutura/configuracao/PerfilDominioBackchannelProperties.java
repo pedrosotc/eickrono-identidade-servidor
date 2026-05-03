@@ -8,6 +8,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class PerfilDominioBackchannelProperties {
 
     private String urlBase = "http://localhost:8082";
+    private String disponibilidadeUrlBase = "http://localhost:8081";
     private Duration timeout = Duration.ofSeconds(5);
     private final JwtInterno jwtInterno = new JwtInterno();
 
@@ -17,6 +18,14 @@ public class PerfilDominioBackchannelProperties {
 
     public void setUrlBase(final String urlBase) {
         this.urlBase = urlBase;
+    }
+
+    public String getDisponibilidadeUrlBase() {
+        return disponibilidadeUrlBase;
+    }
+
+    public void setDisponibilidadeUrlBase(final String disponibilidadeUrlBase) {
+        this.disponibilidadeUrlBase = disponibilidadeUrlBase;
     }
 
     public Duration getTimeout() {

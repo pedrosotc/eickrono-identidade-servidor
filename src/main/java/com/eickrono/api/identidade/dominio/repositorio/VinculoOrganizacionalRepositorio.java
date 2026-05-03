@@ -7,7 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface VinculoOrganizacionalRepositorio extends JpaRepository<VinculoOrganizacional, Long> {
 
-    Optional<VinculoOrganizacional> findByOrganizacaoIdAndUsuarioIdPerfil(String organizacaoId, String usuarioIdPerfil);
+    Optional<VinculoOrganizacional> findByOrganizacaoIdAndPerfilSistemaId(String organizacaoId, String perfilSistemaId);
 
-    List<VinculoOrganizacional> findAllByUsuarioIdPerfilOrderByCriadoEmAsc(String usuarioIdPerfil);
+    List<VinculoOrganizacional> findAllByPerfilSistemaIdOrderByCriadoEmAsc(String perfilSistemaId);
 }

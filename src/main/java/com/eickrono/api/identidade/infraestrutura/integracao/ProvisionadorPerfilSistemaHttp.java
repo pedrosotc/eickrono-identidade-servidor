@@ -3,14 +3,13 @@ package com.eickrono.api.identidade.infraestrutura.integracao;
 import static org.springframework.http.HttpStatus.BAD_GATEWAY;
 import static org.springframework.http.HttpStatus.CONFLICT;
 
-import com.eickrono.api.identidade.aplicacao.modelo.ProvisionamentoPerfilRealizado;
-import com.eickrono.api.identidade.aplicacao.servico.ProvisionadorPerfilDominioServico;
+import com.eickrono.api.identidade.aplicacao.modelo.ProvisionamentoPerfilSistemaRealizado;
+import com.eickrono.api.identidade.aplicacao.servico.ProvisionadorPerfilSistemaServico;
 import com.eickrono.api.identidade.dominio.modelo.CadastroConta;
 import com.eickrono.api.identidade.infraestrutura.configuracao.ConfiguradorRestTemplateBackchannelMtls;
 import com.eickrono.api.identidade.infraestrutura.configuracao.IntegracaoInternaProperties;
 import com.eickrono.api.identidade.infraestrutura.configuracao.PerfilDominioBackchannelProperties;
 import java.net.URI;
-import java.util.Locale;
 import java.util.Objects;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.http.HttpEntity;
@@ -26,11 +25,10 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
 @Component
-public class ProvisionadorPerfilDominioHttp implements ProvisionadorPerfilDominioServico {
+public class ProvisionadorPerfilSistemaHttp implements ProvisionadorPerfilSistemaServico {
 
     private static final String HEADER_SEGREDO_INTERNO = "X-Eickrono-Internal-Secret";
-    private static final String CAMINHO_PROVISIONAMENTO = "/api/interna/identidade/provisionamentos";
-    private static final String CAMINHO_DISPONIBILIDADE_USUARIO = "/api/interna/identidade/usuarios/disponibilidade";
+    private static final String CAMINHO_PROVISIONAMENTO = "/api/interna/perfis-sistema/provisionamentos";
     private static final DefaultResponseErrorHandler NO_OP_ERROR_HANDLER = new NoOpResponseErrorHandler();
 
     private final RestTemplate restTemplate;
@@ -38,7 +36,7 @@ public class ProvisionadorPerfilDominioHttp implements ProvisionadorPerfilDomini
     private final String segredoInterno;
     private final ClienteTokenBackchannelPerfilKeycloak clienteTokenBackchannelPerfilKeycloak;
 
-    public ProvisionadorPerfilDominioHttp(final RestTemplateBuilder restTemplateBuilder,
+    public ProvisionadorPerfilSistemaHttp(final RestTemplateBuilder restTemplateBuilder,
                                           final PerfilDominioBackchannelProperties properties,
                                           final IntegracaoInternaProperties integracaoInternaProperties,
                                           final ConfiguradorRestTemplateBackchannelMtls configuradorRestTemplateBackchannelMtls,
@@ -59,37 +57,15 @@ public class ProvisionadorPerfilDominioHttp implements ProvisionadorPerfilDomini
     }
 
     @Override
-    public boolean usuarioDisponivel(final String usuario) {
-        String usuarioNormalizado = Objects.requireNonNull(usuario, "usuario e obrigatorio")
-                .trim()
-                .toLowerCase(Locale.ROOT);
-        if (usuarioNormalizado.isBlank()) {
-            return false;
-        }
-        ResponseEntity<DisponibilidadeUsuarioInternaResponse> response = restTemplate.exchange(
-                URI.create(urlBase + CAMINHO_DISPONIBILIDADE_USUARIO
-                        + "?usuario=" + UriEscapers.escapeQueryParam(usuarioNormalizado)),
-                HttpMethod.GET,
-                new HttpEntity<>(cabecalhosBasicos()),
-                DisponibilidadeUsuarioInternaResponse.class
-        );
-        DisponibilidadeUsuarioInternaResponse body = response.getBody();
-        if (!response.getStatusCode().is2xxSuccessful() || body == null) {
-            throw new ResponseStatusException(
-                    BAD_GATEWAY,
-                    "Nao foi possivel validar a disponibilidade do usuario no dominio do thimisu."
-            );
-        }
-        return body.disponivel();
-    }
-
-    @Override
-    public ProvisionamentoPerfilRealizado provisionarCadastroConfirmado(final CadastroConta cadastroConta) {
+    public ProvisionamentoPerfilSistemaRealizado provisionarCadastroConfirmado(final CadastroConta cadastroConta,
+                                                                               final Long pessoaIdCentral) {
         Objects.requireNonNull(cadastroConta, "cadastroConta e obrigatorio");
-        ResponseEntity<ProvisionamentoCadastroInternoResponse> response = restTemplate.exchange(
+        Objects.requireNonNull(pessoaIdCentral, "pessoaIdCentral e obrigatorio");
+        ResponseEntity<ProvisionamentoPerfilSistemaInternoResponse> response = restTemplate.exchange(
                 URI.create(urlBase + CAMINHO_PROVISIONAMENTO),
                 HttpMethod.POST,
-                new HttpEntity<>(new ProvisionamentoCadastroInternoRequest(
+                new HttpEntity<>(new ProvisionamentoPerfilSistemaInternoRequest(
+                        pessoaIdCentral,
                         cadastroConta.getCadastroId().toString(),
                         cadastroConta.getSubjectRemoto(),
                         cadastroConta.getTipoPessoa().name(),
@@ -105,22 +81,21 @@ public class ProvisionadorPerfilDominioHttp implements ProvisionadorPerfilDomini
                                 ? null
                                 : cadastroConta.getCanalValidacaoTelefone().name()
                 ), cabecalhosBasicos()),
-                ProvisionamentoCadastroInternoResponse.class
+                ProvisionamentoPerfilSistemaInternoResponse.class
         );
         if (response.getStatusCode().value() == CONFLICT.value()) {
             throw new ResponseStatusException(CONFLICT, "O perfil local do thimisu entrou em conflito durante o provisionamento.");
         }
-        ProvisionamentoCadastroInternoResponse body = response.getBody();
+        ProvisionamentoPerfilSistemaInternoResponse body = response.getBody();
         if (!response.getStatusCode().is2xxSuccessful() || body == null) {
             throw new ResponseStatusException(
                     BAD_GATEWAY,
                     "Nao foi possivel provisionar o perfil no dominio do thimisu."
             );
         }
-        return new ProvisionamentoPerfilRealizado(
-                body.pessoaId(),
-                body.usuarioId(),
-                body.statusUsuario()
+        return new ProvisionamentoPerfilSistemaRealizado(
+                body.perfilSistemaId(),
+                body.statusPerfilSistema()
         );
     }
 
@@ -132,32 +107,26 @@ public class ProvisionadorPerfilDominioHttp implements ProvisionadorPerfilDomini
         return headers;
     }
 
-    private record ProvisionamentoCadastroInternoRequest(
+    private record ProvisionamentoPerfilSistemaInternoRequest(
+            Long pessoaIdCentral,
             String cadastroId,
-            String subjectRemoto,
+            String subPessoa,
             String tipoPessoa,
-            String nomeCompleto,
-            String nomeFantasia,
-            String usuario,
+            String nomePessoaAtual,
+            String nomeFantasiaPessoaAtual,
+            String identificadorPublicoSistema,
             String sexo,
             String paisNascimento,
             java.time.LocalDate dataNascimento,
-            String emailPrincipal,
-            String telefonePrincipal,
+            String emailPessoaAtual,
+            String telefonePessoaAtual,
             String canalValidacaoTelefone
     ) {
     }
 
-    private record ProvisionamentoCadastroInternoResponse(
-            Long pessoaId,
-            String usuarioId,
-            String statusUsuario
-    ) {
-    }
-
-    private record DisponibilidadeUsuarioInternaResponse(
-            String usuario,
-            boolean disponivel
+    private record ProvisionamentoPerfilSistemaInternoResponse(
+            String perfilSistemaId,
+            String statusPerfilSistema
     ) {
     }
 
@@ -165,15 +134,6 @@ public class ProvisionadorPerfilDominioHttp implements ProvisionadorPerfilDomini
         @Override
         public boolean hasError(@NonNull final ClientHttpResponse response) {
             return false;
-        }
-    }
-
-    private static final class UriEscapers {
-        private UriEscapers() {
-        }
-
-        private static String escapeQueryParam(final String value) {
-            return value.replace(" ", "%20");
         }
     }
 }
