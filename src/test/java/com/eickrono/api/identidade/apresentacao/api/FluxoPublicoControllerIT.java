@@ -153,6 +153,7 @@ class FluxoPublicoControllerIT {
 
     @Test
     void deveConsultarDisponibilidadePublicaDoUsuario() throws Exception {
+        setUp();
         when(cadastroContaInternaServico.identificadorPublicoSistemaDisponivelPublico(
                 "ana.souza",
                 "eickrono-thimisu-app"

@@ -373,57 +373,6 @@ public class CadastroContaInternaServico {
         );
     }
 
-    public CadastroContaInternaServico(final CadastroContaRepositorio cadastroContaRepositorio,
-                                       final ClienteContextoPessoaPerfilSistema clienteContextoPessoaPerfilSistema,
-                                       final ClienteAdministracaoCadastroKeycloak clienteAdministracaoCadastroKeycloak,
-                                       final PessoaRepositorio pessoaRepositorio,
-                                       final PerfilIdentidadeRepositorio perfilIdentidadeRepositorio,
-                                       final FormaAcessoRepositorio formaAcessoRepositorio,
-                                       final VinculoSocialRepositorio vinculoSocialRepositorio,
-                                       final ConviteOrganizacionalRepositorio conviteOrganizacionalRepositorio,
-                                       final VinculoOrganizacionalRepositorio vinculoOrganizacionalRepositorio,
-                                       final ProvisionadorPerfilSistemaServico provisionadorPerfilSistemaServico,
-                                       final ConsultadorDisponibilidadeUsuarioSistemaServico consultadorDisponibilidadeUsuarioSistemaServico,
-                                       final ProvisionamentoIdentidadeService provisionamentoIdentidadeService,
-                                       final CanalEnvioCodigoCadastroEmail canalEnvioCodigoCadastroEmail,
-                                       final CanalEnvioCodigoCadastroTelefone canalEnvioCodigoCadastroTelefone,
-                                       final CanalNotificacaoTentativaCadastroEmail canalNotificacaoTentativaCadastroEmail,
-                                       final DispositivoProperties dispositivoProperties,
-                                       final Clock clock,
-                                       final SincronizacaoModeloMultiappService sincronizacaoModeloMultiappService,
-                                       final AuditoriaService auditoriaService,
-                                       final ContextoSocialPendenteJdbc contextoSocialPendenteJdbc,
-                                       final ResolvedorContextoFluxoPublico resolvedorContextoFluxoPublico,
-                                       final ResolvedorProjetoFluxoPublico resolvedorProjetoFluxoPublico,
-                                       final boolean tolerarFalhaDisponibilidadeCentralUsuario) {
-        this(
-                cadastroContaRepositorio,
-                clienteContextoPessoaPerfilSistema,
-                clienteAdministracaoCadastroKeycloak,
-                pessoaRepositorio,
-                perfilIdentidadeRepositorio,
-                formaAcessoRepositorio,
-                vinculoSocialRepositorio,
-                conviteOrganizacionalRepositorio,
-                vinculoOrganizacionalRepositorio,
-                provisionadorPerfilSistemaServico,
-                consultadorDisponibilidadeUsuarioSistemaServico,
-                provisionamentoIdentidadeService,
-                canalEnvioCodigoCadastroEmail,
-                canalEnvioCodigoCadastroTelefone,
-                canalNotificacaoTentativaCadastroEmail,
-                dispositivoProperties,
-                clock,
-                sincronizacaoModeloMultiappService,
-                auditoriaService,
-                contextoSocialPendenteJdbc,
-                resolvedorContextoFluxoPublico,
-                resolvedorProjetoFluxoPublico,
-                tolerarFalhaDisponibilidadeCentralUsuario,
-                true
-        );
-    }
-
     private CadastroContaInternaServico(final CadastroContaRepositorio cadastroContaRepositorio,
                                         final ClienteContextoPessoaPerfilSistema clienteContextoPessoaPerfilSistema,
                                         final ClienteAdministracaoCadastroKeycloak clienteAdministracaoCadastroKeycloak,
@@ -1601,16 +1550,6 @@ public class CadastroContaInternaServico {
                 chave,
                 new IdentidadeSocialPendenteFinalizacao(identidadeFederada, contextoId)
         );
-    }
-
-    private void materializarVinculoSocialLocalSeNecessario(final CadastroConta cadastroConta,
-                                                            final OffsetDateTime instante) {
-        IdentidadeFederadaKeycloak identidadeFederada = new IdentidadeFederadaKeycloak(
-                resolverProvedorVinculoSocialPendente(cadastroConta),
-                cadastroConta.getVinculoSocialPendenteIdentificadorExterno(),
-                cadastroConta.getVinculoSocialPendenteNomeUsuarioExterno()
-        );
-        materializarVinculoSocialLocalSeNecessario(cadastroConta, identidadeFederada, instante);
     }
 
     private void materializarVinculoSocialLocalSeNecessario(final CadastroConta cadastroConta,
