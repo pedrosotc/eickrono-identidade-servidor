@@ -7,7 +7,6 @@ import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.mail.MailException;
-import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 
 public class CanalEnvioCodigoCadastroEmailSmtp implements CanalEnvioCodigoCadastroEmail {
@@ -31,34 +30,21 @@ public class CanalEnvioCodigoCadastroEmailSmtp implements CanalEnvioCodigoCadast
             throw new IllegalArgumentException("codigo e obrigatorio");
         }
 
-        SimpleMailMessage mensagem = new SimpleMailMessage();
-        mensagem.setTo(cadastro.getEmailPrincipal());
-        mensagem.setFrom(cadastroEmailProperties.getRemetente());
-        if (cadastroEmailProperties.getResponderPara() != null
-                && !cadastroEmailProperties.getResponderPara().isBlank()) {
-            mensagem.setReplyTo(cadastroEmailProperties.getResponderPara());
-        }
-        mensagem.setSubject(cadastroEmailProperties.getAssunto());
-        mensagem.setText(criarCorpoMensagem(cadastro, codigoConfirmacao));
-
         try {
-            javaMailSender.send(mensagem);
-            LOGGER.info(
-                    "Codigo de confirmacao de cadastro enviado por SMTP para {} (cadastroId={}, protocoloSuporte={}, sistema={})",
-                    cadastro.getEmailPrincipal(),
-                    cadastro.getCadastroId(),
-                    cadastro.getProtocoloSuporte(),
-                    cadastro.getSistemaSolicitante()
+            new EnvioEmailSmtpRastreavel(javaMailSender, cadastroEmailProperties, LOGGER).enviar(
+                    new EnvioEmailSmtpRastreavel.MensagemEmailRastreavel(
+                            "cadastro_confirmacao",
+                            "cadastro_email_smtp_tentativa",
+                            "cadastro_email_smtp_enviado",
+                            "cadastro_email_smtp_falhou",
+                            cadastro.getEmailPrincipal(),
+                            cadastroEmailProperties.getAssunto(),
+                            criarCorpoMensagem(cadastro, codigoConfirmacao),
+                            cadastro.getCadastroId().toString(),
+                            cadastro.getProtocoloSuporte()
+                    )
             );
         } catch (MailException ex) {
-            LOGGER.error(
-                    "cadastro_email_smtp_falhou cadastroId={} protocoloSuporte={} sistema={} motivo={}",
-                    cadastro.getCadastroId(),
-                    cadastro.getProtocoloSuporte(),
-                    cadastro.getSistemaSolicitante(),
-                    ex.getMessage(),
-                    ex
-            );
             throw new EntregaEmailException(
                     "cadastro_email_indisponivel",
                     "Não foi possível enviar o código de confirmação por e-mail agora. Tente novamente.",

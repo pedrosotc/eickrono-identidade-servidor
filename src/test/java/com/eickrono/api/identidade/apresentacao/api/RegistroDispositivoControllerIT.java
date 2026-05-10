@@ -40,6 +40,7 @@ import com.eickrono.api.identidade.aplicacao.servico.CanalNotificacaoTentativaCa
 import com.eickrono.api.identidade.aplicacao.servico.ClienteContextoPessoaPerfilSistema;
 import com.eickrono.api.identidade.aplicacao.servico.ConsultadorDisponibilidadeUsuarioSistemaServico;
 import com.eickrono.api.identidade.aplicacao.servico.ProvisionadorPerfilSistemaServico;
+import com.eickrono.api.identidade.aplicacao.servico.SincronizacaoModeloMultiappService;
 import com.eickrono.api.identidade.support.ClienteAdministracaoCadastroKeycloakStubConfiguration;
 import com.eickrono.api.identidade.support.InfraestruturaTesteIdentidade;
 import com.eickrono.api.identidade.dominio.modelo.StatusRegistroDispositivo;
@@ -112,6 +113,9 @@ class RegistroDispositivoControllerIT {
 
     @Autowired
     private CadastroContaInternaServico cadastroContaInternaServico;
+
+    @Autowired
+    private SincronizacaoModeloMultiappService sincronizacaoModeloMultiappService;
 
     @Autowired
     private CadastroContaRepositorio cadastroContaRepositorio;
@@ -194,6 +198,8 @@ class RegistroDispositivoControllerIT {
                 "DELETE FROM autenticacao.usuarios WHERE sub_remoto = ?",
                 SUB_CONTA_PROJETO_ATUAL
         );
+        cadastroContaRepositorio.findAll()
+                .forEach(cadastroConta -> sincronizacaoModeloMultiappService.removerCadastro(cadastroConta.getCadastroId()));
         formaAcessoRepositorio.deleteAll();
         perfilIdentidadeRepositorio.deleteAll();
         pessoaRepositorio.deleteAll();
@@ -642,7 +648,7 @@ class RegistroDispositivoControllerIT {
 
     @Test
     void deveResponderContaNaoLiberadaQuandoSessaoSocialEncontrarContaAindaPendente() throws Exception {
-        CadastroConta cadastro = cadastroContaRepositorio.save(new CadastroConta(
+        CadastroConta cadastro = salvarCadastroContaComSincronizacao(new CadastroConta(
                 UUID.randomUUID(),
                 "usuario-xyz",
                 TipoPessoaCadastro.FISICA,
@@ -829,7 +835,7 @@ class RegistroDispositivoControllerIT {
                 OffsetDateTime.parse("2026-04-01T10:00:00Z"),
                 OffsetDateTime.parse("2026-04-01T10:00:00Z")
         ));
-        CadastroConta cadastro = cadastroContaRepositorio.save(new CadastroConta(
+        CadastroConta cadastro = salvarCadastroContaComSincronizacao(new CadastroConta(
                 UUID.randomUUID(),
                 "sub-conta-local",
                 TipoPessoaCadastro.FISICA,
@@ -1029,11 +1035,17 @@ class RegistroDispositivoControllerIT {
                         new SimpleGrantedAuthority("SCOPE_identidade:ler")));
     }
 
+    private CadastroConta salvarCadastroContaComSincronizacao(final CadastroConta cadastroConta) {
+        CadastroConta salvo = cadastroContaRepositorio.save(cadastroConta);
+        sincronizacaoModeloMultiappService.sincronizarCadastro(salvo);
+        return salvo;
+    }
+
     private RequestPostProcessor clienteJwtInterno() {
         return Objects.requireNonNull(jwt().jwt(builder -> builder
-                        .subject("service-account-servidor-autorizacao")
-                        .claim("azp", "servidor-autorizacao")
-                        .claim("preferred_username", "service-account-servidor-autorizacao")));
+                        .subject("service-account-eickrono-keycloak")
+                        .claim("azp", "eickrono-keycloak")
+                        .claim("preferred_username", "service-account-eickrono-keycloak")));
     }
 
     private MediaType jsonMediaType() {

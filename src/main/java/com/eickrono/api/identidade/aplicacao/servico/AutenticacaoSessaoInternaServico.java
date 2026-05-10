@@ -36,7 +36,7 @@ public class AutenticacaoSessaoInternaServico {
     private static final String GRANT_TYPE_TOKEN_EXCHANGE = "urn:ietf:params:oauth:grant-type:token-exchange";
     private static final String TOKEN_TYPE_ACCESS_TOKEN = "urn:ietf:params:oauth:token-type:access_token";
     private static final String TOKEN_TYPE_REFRESH_TOKEN = "urn:ietf:params:oauth:token-type:refresh_token";
-    private static final String TOKEN_TYPE_JWT = "urn:ietf:params:oauth:token-type:jwt";
+    private static final String TOKEN_TYPE_ID_TOKEN = "urn:ietf:params:oauth:token-type:id_token";
     private static final String CAMINHO_TOKEN = "/realms/%s/protocol/openid-connect/token";
     private static final DefaultResponseErrorHandler NO_OP_ERROR_HANDLER = new NoOpResponseErrorHandler();
 
@@ -170,7 +170,7 @@ public class AutenticacaoSessaoInternaServico {
                 .toLowerCase(Locale.ROOT);
         return switch (provedorNormalizado) {
             case "google" -> new ParametrosTrocaTokenSocial("google", TOKEN_TYPE_ACCESS_TOKEN);
-            case "apple" -> new ParametrosTrocaTokenSocial(null, TOKEN_TYPE_JWT);
+            case "apple" -> new ParametrosTrocaTokenSocial("apple", TOKEN_TYPE_ID_TOKEN);
             default -> throw new ResponseStatusException(
                     BAD_REQUEST,
                     "Provedor social não suportado para autenticação nativa."

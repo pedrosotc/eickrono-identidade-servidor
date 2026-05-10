@@ -53,6 +53,8 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.http.HttpStatus;
 import org.junit.jupiter.api.DisplayName;
@@ -119,6 +121,9 @@ class CadastroContaInternaServicoTest {
     @Mock
     private ConsultadorDisponibilidadeUsuarioSistemaServico consultadorDisponibilidadeUsuarioSistemaServico;
 
+    @Mock
+    private ContextoSocialPendenteJdbc contextoSocialPendenteJdbc;
+
     @Captor
     private ArgumentCaptor<CadastroConta> cadastroCaptor;
 
@@ -137,8 +142,13 @@ class CadastroContaInternaServicoTest {
     @Captor
     private ArgumentCaptor<ConviteOrganizacional> conviteOrganizacionalCaptor;
 
+    @Captor
+    private ArgumentCaptor<IdentidadeFederadaKeycloak> identidadeFederadaCaptor;
+
     private CadastroContaInternaServico servico;
     private CadastroContaInternaServico servicoPublico;
+    private CadastroContaInternaServico servicoPublicoToleranteFalhaDisponibilidade;
+    private CadastroContaInternaServico servicoPublicoComContextoSocialPendente;
 
     private CadastroContaInternaServico servico() {
         if (servico != null) {
@@ -189,6 +199,74 @@ class CadastroContaInternaServicoTest {
                 auditoriaService
         );
         return servicoPublico;
+    }
+
+    private CadastroContaInternaServico servicoPublicoToleranteFalhaDisponibilidade() {
+        if (servicoPublicoToleranteFalhaDisponibilidade != null) {
+            return servicoPublicoToleranteFalhaDisponibilidade;
+        }
+        DispositivoProperties dispositivoProperties = criarDispositivoProperties();
+        Clock clock = Clock.fixed(Instant.parse("2026-03-19T10:00:00Z"), ZoneOffset.UTC);
+        servicoPublicoToleranteFalhaDisponibilidade = new CadastroContaInternaServico(
+                cadastroContaRepositorio,
+                clienteContextoPessoaPerfilSistema,
+                clienteAdministracaoCadastroKeycloak,
+                pessoaRepositorio,
+                perfilIdentidadeRepositorio,
+                formaAcessoRepositorio,
+                vinculoSocialRepositorio,
+                conviteOrganizacionalRepositorio,
+                vinculoOrganizacionalRepositorio,
+                provisionadorPerfilSistemaServico,
+                consultadorDisponibilidadeUsuarioSistemaServico,
+                provisionamentoIdentidadeService,
+                canalEnvioCodigoCadastroEmail,
+                canalEnvioCodigoCadastroTelefone,
+                canalNotificacaoTentativaCadastroEmail,
+                dispositivoProperties,
+                clock,
+                null,
+                auditoriaService,
+                null,
+                new ResolvedorContextoFluxoPublico(cadastroContaRepositorio, recuperacaoSenhaRepositorio),
+                aplicacaoId -> new ProjetoFluxoPublicoResolvido(0L, aplicacaoId, aplicacaoId, null, null, null, true),
+                true
+        );
+        return servicoPublicoToleranteFalhaDisponibilidade;
+    }
+
+    private CadastroContaInternaServico servicoPublicoComContextoSocialPendente() {
+        if (servicoPublicoComContextoSocialPendente != null) {
+            return servicoPublicoComContextoSocialPendente;
+        }
+        DispositivoProperties dispositivoProperties = criarDispositivoProperties();
+        Clock clock = Clock.fixed(Instant.parse("2026-03-19T10:00:00Z"), ZoneOffset.UTC);
+        servicoPublicoComContextoSocialPendente = new CadastroContaInternaServico(
+                cadastroContaRepositorio,
+                clienteContextoPessoaPerfilSistema,
+                clienteAdministracaoCadastroKeycloak,
+                pessoaRepositorio,
+                perfilIdentidadeRepositorio,
+                formaAcessoRepositorio,
+                vinculoSocialRepositorio,
+                conviteOrganizacionalRepositorio,
+                vinculoOrganizacionalRepositorio,
+                provisionadorPerfilSistemaServico,
+                consultadorDisponibilidadeUsuarioSistemaServico,
+                provisionamentoIdentidadeService,
+                canalEnvioCodigoCadastroEmail,
+                canalEnvioCodigoCadastroTelefone,
+                canalNotificacaoTentativaCadastroEmail,
+                dispositivoProperties,
+                clock,
+                null,
+                auditoriaService,
+                contextoSocialPendenteJdbc,
+                new ResolvedorContextoFluxoPublico(cadastroContaRepositorio, recuperacaoSenhaRepositorio),
+                aplicacaoId -> new ProjetoFluxoPublicoResolvido(0L, aplicacaoId, aplicacaoId, null, null, null, true),
+                false
+        );
+        return servicoPublicoComContextoSocialPendente;
     }
 
     private DispositivoProperties criarDispositivoProperties() {
@@ -903,6 +981,22 @@ class CadastroContaInternaServicoTest {
     }
 
     @Test
+    @DisplayName("deve tolerar falha da disponibilidade central em hml usando apenas a reserva local")
+    void deveTolerarFalhaDisponibilidadeCentralEmHml() {
+        when(cadastroContaRepositorio.findByUsuarioIgnoreCaseAndSistemaSolicitanteIgnoreCase(
+                eq("ana.souza"),
+                anyString())).thenReturn(Optional.empty());
+
+        boolean disponivel = servicoPublicoToleranteFalhaDisponibilidade().identificadorPublicoSistemaDisponivelPublico(
+                " Ana.Souza ",
+                " Eickrono-Thimisu-App "
+        );
+
+        assertThat(disponivel).isTrue();
+        verify(consultadorDisponibilidadeUsuarioSistemaServico, never()).usuarioDisponivel(anyString(), anyString());
+    }
+
+    @Test
     @DisplayName("deve responder com erro estruturado e avisar por e-mail quando já existir conta ativa para o e-mail")
     void deveAvisarPorEmailQuandoJaExistirContaAtivaNoEndereco() {
         when(cadastroContaRepositorio.findByUsuarioIgnoreCaseAndSistemaSolicitanteIgnoreCase(
@@ -1289,6 +1383,103 @@ class CadastroContaInternaServicoTest {
         assertThat(salvo.get().getVinculoSocialPendenteProvedor()).isNull();
         assertThat(salvo.get().getVinculoSocialPendenteIdentificadorExterno()).isNull();
         assertThat(salvo.get().getVinculoSocialPendenteNomeUsuarioExterno()).isNull();
+    }
+
+    @Test
+    @DisplayName("deve vincular todos os contextos sociais pendentes do cadastro ao confirmar o email")
+    void deveVincularTodosOsContextosSociaisPendentesDoCadastroAoConfirmarEmail() {
+        AtomicReference<CadastroConta> salvo = new AtomicReference<>();
+        when(cadastroContaRepositorio.findByEmailPrincipal("ana@eickrono.com")).thenReturn(Optional.empty());
+        when(cadastroContaRepositorio.findByUsuarioIgnoreCaseAndSistemaSolicitanteIgnoreCase(
+                eq("ana.souza"),
+                anyString())).thenReturn(Optional.empty());
+        when(clienteContextoPessoaPerfilSistema.buscarPorEmail("ana@eickrono.com")).thenReturn(Optional.empty());
+        when(consultadorDisponibilidadeUsuarioSistemaServico.usuarioDisponivel(eq("ana.souza"), anyString())).thenReturn(true);
+        when(clienteAdministracaoCadastroKeycloak.criarUsuarioPendente(
+                "Ana Souza", "ana@eickrono.com", "SenhaForte@123"))
+                .thenReturn(new CadastroKeycloakProvisionado("sub-ana", "ana@eickrono.com", "Ana Souza"));
+        when(cadastroContaRepositorio.save(any(CadastroConta.class))).thenAnswer(invocation -> {
+            CadastroConta cadastro = invocation.getArgument(0);
+            salvo.set(cadastro);
+            return cadastro;
+        });
+        Pessoa pessoaConfirmada = pessoaCanonica("sub-ana", "ana@eickrono.com", "Ana Souza", 10L);
+        when(pessoaRepositorio.findById(10L)).thenReturn(Optional.of(pessoaConfirmada));
+        PerfilIdentidade perfil = new PerfilIdentidade(
+                "sub-ana",
+                "ana@eickrono.com",
+                "Ana Souza",
+                Set.of(),
+                Set.of(),
+                OffsetDateTime.parse("2026-03-19T10:00:00Z")
+        );
+        when(perfilIdentidadeRepositorio.findBySub("sub-ana")).thenReturn(Optional.of(perfil));
+        when(provisionamentoIdentidadeService.confirmarEmailCadastro(
+                eq("sub-ana"),
+                eq("ana@eickrono.com"),
+                eq("Ana Souza"),
+                any()
+        )).thenReturn(pessoaConfirmada);
+        when(provisionadorPerfilSistemaServico.provisionarCadastroConfirmado(any(CadastroConta.class), eq(10L)))
+                .thenReturn(new ProvisionamentoPerfilSistemaRealizado(
+                        "usuario-001",
+                        "LIBERADO"
+                ));
+        UUID googleId = UUID.randomUUID();
+        UUID appleId = UUID.randomUUID();
+        when(contextoSocialPendenteJdbc.listarPendentesAberturaCadastro(0L, "ana@eickrono.com"))
+                .thenReturn(List.of(
+                        new ContextoSocialPendenteJdbc.ContextoSocialPendenteCadastro(
+                                googleId,
+                                "google",
+                                "google-123",
+                                "ana.google",
+                                "Ana Google",
+                                "https://img/google.png"
+                        ),
+                        new ContextoSocialPendenteJdbc.ContextoSocialPendenteCadastro(
+                                appleId,
+                                "apple",
+                                "apple-123",
+                                "ana.apple",
+                                "Ana Apple",
+                                "https://img/apple.png"
+                        )
+                ));
+
+        CadastroInternoRealizado cadastro = servicoPublicoComContextoSocialPendente().cadastrarPublico(
+                TipoPessoaCadastro.FISICA,
+                "Ana Souza",
+                null,
+                "ana.souza",
+                null,
+                null,
+                null,
+                "ana@eickrono.com",
+                "+5511999999999",
+                CanalValidacaoTelefoneCadastro.SMS,
+                "SenhaForte@123",
+                "eickrono-thimisu-app",
+                "127.0.0.1",
+                "JUnit"
+        );
+        verify(canalEnvioCodigoCadastroEmail).enviar(any(CadastroConta.class), codigoCaptor.capture());
+        verify(canalEnvioCodigoCadastroTelefone).enviar(any(CadastroConta.class), codigoCaptor.capture());
+        when(cadastroContaRepositorio.findByCadastroId(cadastro.cadastroId())).thenReturn(Optional.of(salvo.get()));
+
+        servicoPublicoComContextoSocialPendente().confirmarEmailPublico(
+                cadastro.cadastroId(),
+                codigoCaptor.getAllValues().get(0),
+                codigoCaptor.getAllValues().get(1)
+        );
+
+        verify(clienteAdministracaoCadastroKeycloak, times(2))
+                .vincularIdentidadeFederada(eq("sub-ana"), identidadeFederadaCaptor.capture());
+        assertThat(identidadeFederadaCaptor.getAllValues())
+                .extracting(IdentidadeFederadaKeycloak::identificadorCanonico)
+                .containsExactly("google-123", "apple-123");
+        verify(contextoSocialPendenteJdbc).consumir(googleId);
+        verify(contextoSocialPendenteJdbc).consumir(appleId);
     }
 
     @Test

@@ -7,7 +7,6 @@ import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.mail.MailException;
-import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 
 public class CanalEnvioCodigoRecuperacaoSenhaEmailSmtp implements CanalEnvioCodigoRecuperacaoSenhaEmail {
@@ -31,32 +30,21 @@ public class CanalEnvioCodigoRecuperacaoSenhaEmailSmtp implements CanalEnvioCodi
             throw new IllegalArgumentException("codigo e obrigatorio");
         }
 
-        SimpleMailMessage mensagem = new SimpleMailMessage();
-        mensagem.setTo(recuperacao.getEmailPrincipal());
-        mensagem.setFrom(cadastroEmailProperties.getRemetente());
-        if (cadastroEmailProperties.getResponderPara() != null
-                && !cadastroEmailProperties.getResponderPara().isBlank()) {
-            mensagem.setReplyTo(cadastroEmailProperties.getResponderPara());
-        }
-        mensagem.setSubject(cadastroEmailProperties.getAssuntoRecuperacaoSenha());
-        mensagem.setText(criarCorpoMensagem(recuperacao, codigoConfirmacao));
-
         try {
-            javaMailSender.send(mensagem);
-            LOGGER.info(
-                    "Codigo de recuperacao de senha enviado por SMTP para {} (fluxoId={}, protocoloSuporte={})",
-                    recuperacao.getEmailPrincipal(),
-                    recuperacao.getFluxoId(),
-                    recuperacao.getProtocoloSuporte()
+            new EnvioEmailSmtpRastreavel(javaMailSender, cadastroEmailProperties, LOGGER).enviar(
+                    new EnvioEmailSmtpRastreavel.MensagemEmailRastreavel(
+                            "recuperacao_senha",
+                            "recuperacao_email_smtp_tentativa",
+                            "recuperacao_email_smtp_enviado",
+                            "recuperacao_email_smtp_falhou",
+                            recuperacao.getEmailPrincipal(),
+                            cadastroEmailProperties.getAssuntoRecuperacaoSenha(),
+                            criarCorpoMensagem(recuperacao, codigoConfirmacao),
+                            recuperacao.getFluxoId().toString(),
+                            recuperacao.getProtocoloSuporte()
+                    )
             );
         } catch (MailException ex) {
-            LOGGER.error(
-                    "recuperacao_email_smtp_falhou fluxoId={} protocoloSuporte={} motivo={}",
-                    recuperacao.getFluxoId(),
-                    recuperacao.getProtocoloSuporte(),
-                    ex.getMessage(),
-                    ex
-            );
             throw new EntregaEmailException(
                     "recuperacao_email_indisponivel",
                     "Não foi possível enviar o código de recuperação por e-mail agora. Tente novamente.",

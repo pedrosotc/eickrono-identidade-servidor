@@ -53,6 +53,7 @@ import javax.crypto.spec.SecretKeySpec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -83,12 +84,66 @@ public class CadastroContaInternaServico {
     private final Clock clock;
     private final SincronizacaoModeloMultiappService sincronizacaoModeloMultiappService;
     private final AuditoriaService auditoriaService;
+    private final ContextoSocialPendenteJdbc contextoSocialPendenteJdbc;
     private final ResolvedorContextoFluxoPublico resolvedorContextoFluxoPublico;
     private final ResolvedorProjetoFluxoPublico resolvedorProjetoFluxoPublico;
+    private final boolean tolerarFalhaDisponibilidadeCentralUsuario;
     private ProvisionamentoIdentidadeService provisionamentoIdentidadeServiceCompat;
     private final HexFormat hexFormat = HexFormat.of();
 
     @Autowired
+    public CadastroContaInternaServico(final CadastroContaRepositorio cadastroContaRepositorio,
+                                       final ClienteContextoPessoaPerfilSistema clienteContextoPessoaPerfilSistema,
+                                       final ClienteAdministracaoCadastroKeycloak clienteAdministracaoCadastroKeycloak,
+                                       final PessoaRepositorio pessoaRepositorio,
+                                       final PerfilIdentidadeRepositorio perfilIdentidadeRepositorio,
+                                       final FormaAcessoRepositorio formaAcessoRepositorio,
+                                       final VinculoSocialRepositorio vinculoSocialRepositorio,
+                                       final ConviteOrganizacionalRepositorio conviteOrganizacionalRepositorio,
+                                       final VinculoOrganizacionalRepositorio vinculoOrganizacionalRepositorio,
+                                       final ProvisionadorPerfilSistemaServico provisionadorPerfilSistemaServico,
+                                       final ConsultadorDisponibilidadeUsuarioSistemaServico consultadorDisponibilidadeUsuarioSistemaServico,
+                                       final ProvisionamentoIdentidadeService provisionamentoIdentidadeService,
+                                       final CanalEnvioCodigoCadastroEmail canalEnvioCodigoCadastroEmail,
+                                       final CanalEnvioCodigoCadastroTelefone canalEnvioCodigoCadastroTelefone,
+                                       final CanalNotificacaoTentativaCadastroEmail canalNotificacaoTentativaCadastroEmail,
+                                       final DispositivoProperties dispositivoProperties,
+                                       final Clock clock,
+                                       final SincronizacaoModeloMultiappService sincronizacaoModeloMultiappService,
+                                       final AuditoriaService auditoriaService,
+                                       final ContextoSocialPendenteJdbc contextoSocialPendenteJdbc,
+                                       final ResolvedorContextoFluxoPublico resolvedorContextoFluxoPublico,
+                                       final ResolvedorProjetoFluxoPublico resolvedorProjetoFluxoPublico,
+                                       @Value("${identidade.cadastro.tolerar-falha-disponibilidade-central:false}")
+                                       final boolean tolerarFalhaDisponibilidadeCentralUsuario) {
+        this(
+                cadastroContaRepositorio,
+                clienteContextoPessoaPerfilSistema,
+                clienteAdministracaoCadastroKeycloak,
+                pessoaRepositorio,
+                perfilIdentidadeRepositorio,
+                formaAcessoRepositorio,
+                vinculoSocialRepositorio,
+                conviteOrganizacionalRepositorio,
+                vinculoOrganizacionalRepositorio,
+                provisionadorPerfilSistemaServico,
+                consultadorDisponibilidadeUsuarioSistemaServico,
+                provisionamentoIdentidadeService,
+                canalEnvioCodigoCadastroEmail,
+                canalEnvioCodigoCadastroTelefone,
+                canalNotificacaoTentativaCadastroEmail,
+                dispositivoProperties,
+                clock,
+                sincronizacaoModeloMultiappService,
+                auditoriaService,
+                contextoSocialPendenteJdbc,
+                resolvedorContextoFluxoPublico,
+                resolvedorProjetoFluxoPublico,
+                tolerarFalhaDisponibilidadeCentralUsuario,
+                true
+        );
+    }
+
     public CadastroContaInternaServico(final CadastroContaRepositorio cadastroContaRepositorio,
                                        final ClienteContextoPessoaPerfilSistema clienteContextoPessoaPerfilSistema,
                                        final ClienteAdministracaoCadastroKeycloak clienteAdministracaoCadastroKeycloak,
@@ -130,8 +185,60 @@ public class CadastroContaInternaServico {
                 clock,
                 sincronizacaoModeloMultiappService,
                 auditoriaService,
+                null,
                 resolvedorContextoFluxoPublico,
                 resolvedorProjetoFluxoPublico,
+                false,
+                true
+        );
+    }
+
+    public CadastroContaInternaServico(final CadastroContaRepositorio cadastroContaRepositorio,
+                                       final ClienteContextoPessoaPerfilSistema clienteContextoPessoaPerfilSistema,
+                                       final ClienteAdministracaoCadastroKeycloak clienteAdministracaoCadastroKeycloak,
+                                       final PessoaRepositorio pessoaRepositorio,
+                                       final PerfilIdentidadeRepositorio perfilIdentidadeRepositorio,
+                                       final FormaAcessoRepositorio formaAcessoRepositorio,
+                                       final VinculoSocialRepositorio vinculoSocialRepositorio,
+                                       final ConviteOrganizacionalRepositorio conviteOrganizacionalRepositorio,
+                                       final VinculoOrganizacionalRepositorio vinculoOrganizacionalRepositorio,
+                                       final ProvisionadorPerfilSistemaServico provisionadorPerfilSistemaServico,
+                                       final ConsultadorDisponibilidadeUsuarioSistemaServico consultadorDisponibilidadeUsuarioSistemaServico,
+                                       final ProvisionamentoIdentidadeService provisionamentoIdentidadeService,
+                                       final CanalEnvioCodigoCadastroEmail canalEnvioCodigoCadastroEmail,
+                                       final CanalEnvioCodigoCadastroTelefone canalEnvioCodigoCadastroTelefone,
+                                       final CanalNotificacaoTentativaCadastroEmail canalNotificacaoTentativaCadastroEmail,
+                                       final DispositivoProperties dispositivoProperties,
+                                       final Clock clock,
+                                       final SincronizacaoModeloMultiappService sincronizacaoModeloMultiappService,
+                                       final AuditoriaService auditoriaService,
+                                       final ContextoSocialPendenteJdbc contextoSocialPendenteJdbc,
+                                       final ResolvedorContextoFluxoPublico resolvedorContextoFluxoPublico,
+                                       final ResolvedorProjetoFluxoPublico resolvedorProjetoFluxoPublico) {
+        this(
+                cadastroContaRepositorio,
+                clienteContextoPessoaPerfilSistema,
+                clienteAdministracaoCadastroKeycloak,
+                pessoaRepositorio,
+                perfilIdentidadeRepositorio,
+                formaAcessoRepositorio,
+                vinculoSocialRepositorio,
+                conviteOrganizacionalRepositorio,
+                vinculoOrganizacionalRepositorio,
+                provisionadorPerfilSistemaServico,
+                consultadorDisponibilidadeUsuarioSistemaServico,
+                provisionamentoIdentidadeService,
+                canalEnvioCodigoCadastroEmail,
+                canalEnvioCodigoCadastroTelefone,
+                canalNotificacaoTentativaCadastroEmail,
+                dispositivoProperties,
+                clock,
+                sincronizacaoModeloMultiappService,
+                auditoriaService,
+                contextoSocialPendenteJdbc,
+                resolvedorContextoFluxoPublico,
+                resolvedorProjetoFluxoPublico,
+                false,
                 true
         );
     }
@@ -168,8 +275,10 @@ public class CadastroContaInternaServico {
                 clock,
                 null,
                 null,
+                null,
                 new ResolvedorContextoFluxoPublico(cadastroContaRepositorio, recuperacaoSenhaRepositorio),
                 aplicacaoId -> new ProjetoFluxoPublicoResolvido(0L, aplicacaoId, aplicacaoId, null, null, null, true),
+                false,
                 false
         );
     }
@@ -256,8 +365,61 @@ public class CadastroContaInternaServico {
                 clock,
                 sincronizacaoModeloMultiappService,
                 auditoriaService,
+                null,
                 new ResolvedorContextoFluxoPublico(cadastroContaRepositorio, recuperacaoSenhaRepositorio),
                 aplicacaoId -> new ProjetoFluxoPublicoResolvido(0L, aplicacaoId, aplicacaoId, null, null, null, true),
+                false,
+                true
+        );
+    }
+
+    public CadastroContaInternaServico(final CadastroContaRepositorio cadastroContaRepositorio,
+                                       final ClienteContextoPessoaPerfilSistema clienteContextoPessoaPerfilSistema,
+                                       final ClienteAdministracaoCadastroKeycloak clienteAdministracaoCadastroKeycloak,
+                                       final PessoaRepositorio pessoaRepositorio,
+                                       final PerfilIdentidadeRepositorio perfilIdentidadeRepositorio,
+                                       final FormaAcessoRepositorio formaAcessoRepositorio,
+                                       final VinculoSocialRepositorio vinculoSocialRepositorio,
+                                       final ConviteOrganizacionalRepositorio conviteOrganizacionalRepositorio,
+                                       final VinculoOrganizacionalRepositorio vinculoOrganizacionalRepositorio,
+                                       final ProvisionadorPerfilSistemaServico provisionadorPerfilSistemaServico,
+                                       final ConsultadorDisponibilidadeUsuarioSistemaServico consultadorDisponibilidadeUsuarioSistemaServico,
+                                       final ProvisionamentoIdentidadeService provisionamentoIdentidadeService,
+                                       final CanalEnvioCodigoCadastroEmail canalEnvioCodigoCadastroEmail,
+                                       final CanalEnvioCodigoCadastroTelefone canalEnvioCodigoCadastroTelefone,
+                                       final CanalNotificacaoTentativaCadastroEmail canalNotificacaoTentativaCadastroEmail,
+                                       final DispositivoProperties dispositivoProperties,
+                                       final Clock clock,
+                                       final SincronizacaoModeloMultiappService sincronizacaoModeloMultiappService,
+                                       final AuditoriaService auditoriaService,
+                                       final ContextoSocialPendenteJdbc contextoSocialPendenteJdbc,
+                                       final ResolvedorContextoFluxoPublico resolvedorContextoFluxoPublico,
+                                       final ResolvedorProjetoFluxoPublico resolvedorProjetoFluxoPublico,
+                                       final boolean tolerarFalhaDisponibilidadeCentralUsuario) {
+        this(
+                cadastroContaRepositorio,
+                clienteContextoPessoaPerfilSistema,
+                clienteAdministracaoCadastroKeycloak,
+                pessoaRepositorio,
+                perfilIdentidadeRepositorio,
+                formaAcessoRepositorio,
+                vinculoSocialRepositorio,
+                conviteOrganizacionalRepositorio,
+                vinculoOrganizacionalRepositorio,
+                provisionadorPerfilSistemaServico,
+                consultadorDisponibilidadeUsuarioSistemaServico,
+                provisionamentoIdentidadeService,
+                canalEnvioCodigoCadastroEmail,
+                canalEnvioCodigoCadastroTelefone,
+                canalNotificacaoTentativaCadastroEmail,
+                dispositivoProperties,
+                clock,
+                sincronizacaoModeloMultiappService,
+                auditoriaService,
+                contextoSocialPendenteJdbc,
+                resolvedorContextoFluxoPublico,
+                resolvedorProjetoFluxoPublico,
+                tolerarFalhaDisponibilidadeCentralUsuario,
                 true
         );
     }
@@ -281,8 +443,10 @@ public class CadastroContaInternaServico {
                                         final Clock clock,
                                         final SincronizacaoModeloMultiappService sincronizacaoModeloMultiappService,
                                         final AuditoriaService auditoriaService,
+                                        final ContextoSocialPendenteJdbc contextoSocialPendenteJdbc,
                                         final ResolvedorContextoFluxoPublico resolvedorContextoFluxoPublico,
                                         final ResolvedorProjetoFluxoPublico resolvedorProjetoFluxoPublico,
+                                        final boolean tolerarFalhaDisponibilidadeCentralUsuario,
                                         final boolean exigirProvisionadorPerfil) {
         this.cadastroContaRepositorio = Objects.requireNonNull(cadastroContaRepositorio, "cadastroContaRepositorio é obrigatório");
         this.clienteContextoPessoaPerfilSistema = Objects.requireNonNull(
@@ -316,10 +480,12 @@ public class CadastroContaInternaServico {
         this.clock = Objects.requireNonNull(clock, "clock é obrigatório");
         this.sincronizacaoModeloMultiappService = sincronizacaoModeloMultiappService;
         this.auditoriaService = auditoriaService;
+        this.contextoSocialPendenteJdbc = contextoSocialPendenteJdbc;
         this.resolvedorContextoFluxoPublico = Objects.requireNonNull(
                 resolvedorContextoFluxoPublico, "resolvedorContextoFluxoPublico e obrigatorio");
         this.resolvedorProjetoFluxoPublico = Objects.requireNonNull(
                 resolvedorProjetoFluxoPublico, "resolvedorProjetoFluxoPublico e obrigatorio");
+        this.tolerarFalhaDisponibilidadeCentralUsuario = tolerarFalhaDisponibilidadeCentralUsuario;
         this.provisionamentoIdentidadeServiceCompat = provisionamentoIdentidadeServiceCompat;
     }
 
@@ -1203,17 +1369,7 @@ public class CadastroContaInternaServico {
                     .orElse(statusPerfilSistema);
         }
 
-        if (cadastroConta.possuiVinculoSocialPendente()) {
-            clienteAdministracaoCadastroKeycloak.vincularIdentidadeFederada(
-                    cadastroConta.getSubjectRemoto(),
-                    new IdentidadeFederadaKeycloak(
-                            resolverProvedorVinculoSocialPendente(cadastroConta),
-                            cadastroConta.getVinculoSocialPendenteIdentificadorExterno(),
-                            cadastroConta.getVinculoSocialPendenteNomeUsuarioExterno()
-                    )
-            );
-            materializarVinculoSocialLocalSeNecessario(cadastroConta, agora);
-        }
+        vincularIdentidadesSociaisPendentesDoCadastro(cadastroConta, agora);
         materializarVinculoOrganizacionalSeNecessario(cadastroConta, agora);
         clienteAdministracaoCadastroKeycloak.confirmarEmailEAtivarUsuario(
                 cadastroConta.getSubjectRemoto(),
@@ -1313,6 +1469,14 @@ public class CadastroContaInternaServico {
         ).isPresent()) {
             return false;
         }
+        if (tolerarFalhaDisponibilidadeCentralUsuario) {
+            LOGGER.warn(
+                    "cadastro_publico_disponibilidade_central_tolerada usuario={} sistemaSolicitante={}",
+                    usuarioNormalizado,
+                    sistemaSolicitante
+            );
+            return true;
+        }
         return consultadorDisponibilidadeUsuarioSistemaServico == null
                 || consultadorDisponibilidadeUsuarioSistemaServico.usuarioDisponivel(
                         usuarioNormalizado,
@@ -1344,7 +1508,113 @@ public class CadastroContaInternaServico {
                 .orElseThrow(() -> new IllegalStateException("Provedor social pendente inválido para o cadastro."));
     }
 
+    private void vincularIdentidadesSociaisPendentesDoCadastro(final CadastroConta cadastroConta,
+                                                               final OffsetDateTime instante) {
+        for (IdentidadeSocialPendenteFinalizacao identidadePendente :
+                resolverIdentidadesSociaisPendentesDoCadastro(cadastroConta)) {
+            clienteAdministracaoCadastroKeycloak.vincularIdentidadeFederada(
+                    cadastroConta.getSubjectRemoto(),
+                    identidadePendente.identidadeFederada()
+            );
+            materializarVinculoSocialLocalSeNecessario(
+                    cadastroConta,
+                    identidadePendente.identidadeFederada(),
+                    instante
+            );
+            if (identidadePendente.contextoId() != null && contextoSocialPendenteJdbc != null) {
+                contextoSocialPendenteJdbc.consumir(identidadePendente.contextoId());
+            }
+        }
+    }
+
+    private List<IdentidadeSocialPendenteFinalizacao> resolverIdentidadesSociaisPendentesDoCadastro(
+            final CadastroConta cadastroConta) {
+        java.util.LinkedHashMap<String, IdentidadeSocialPendenteFinalizacao> identidades = new java.util.LinkedHashMap<>();
+
+        if (contextoSocialPendenteJdbc != null) {
+            try {
+                ProjetoFluxoPublicoResolvido projeto = resolvedorProjetoFluxoPublico
+                        .resolverAtivo(cadastroConta.getSistemaSolicitante());
+                if (projeto != null) {
+                    List<ContextoSocialPendenteJdbc.ContextoSocialPendenteCadastro> contextos =
+                            contextoSocialPendenteJdbc.listarPendentesAberturaCadastro(
+                                    projeto.clienteEcossistemaId(),
+                                    cadastroConta.getEmailPrincipal()
+                            );
+                    for (ContextoSocialPendenteJdbc.ContextoSocialPendenteCadastro contexto : contextos) {
+                        Optional<ProvedorVinculoSocial> provedor = ProvedorVinculoSocial.fromAlias(contexto.provedor());
+                        if (provedor.isEmpty()) {
+                            LOGGER.warn(
+                                    "contexto_social_pendente_ignorado_provedor_desconhecido cadastroId={} provedor={}",
+                                    cadastroConta.getCadastroId(),
+                                    contexto.provedor()
+                            );
+                            continue;
+                        }
+                        IdentidadeFederadaKeycloak identidadeFederada = new IdentidadeFederadaKeycloak(
+                                provedor.orElseThrow(),
+                                contexto.identificadorExterno(),
+                                contexto.nomeUsuarioExterno(),
+                                contexto.nomeExibicaoExterno(),
+                                contexto.urlAvatarExterno()
+                        );
+                        adicionarIdentidadeSocialPendente(
+                                identidades,
+                                identidadeFederada,
+                                contexto.id()
+                        );
+                    }
+                }
+            } catch (RuntimeException exception) {
+                LOGGER.warn(
+                        "falha_resolucao_contextos_sociais_pendentes_pos_confirmacao cadastroId={} sistema={} motivo={}",
+                        cadastroConta.getCadastroId(),
+                        cadastroConta.getSistemaSolicitante(),
+                        exception.getMessage()
+                );
+            }
+        }
+
+        if (cadastroConta.possuiVinculoSocialPendente()) {
+            adicionarIdentidadeSocialPendente(
+                    identidades,
+                    new IdentidadeFederadaKeycloak(
+                            resolverProvedorVinculoSocialPendente(cadastroConta),
+                            cadastroConta.getVinculoSocialPendenteIdentificadorExterno(),
+                            cadastroConta.getVinculoSocialPendenteNomeUsuarioExterno()
+                    ),
+                    null
+            );
+        }
+
+        return List.copyOf(identidades.values());
+    }
+
+    private void adicionarIdentidadeSocialPendente(
+            final java.util.LinkedHashMap<String, IdentidadeSocialPendenteFinalizacao> identidades,
+            final IdentidadeFederadaKeycloak identidadeFederada,
+            final UUID contextoId) {
+        String chave = identidadeFederada.provedor().getAliasApi()
+                + "::"
+                + identidadeFederada.identificadorCanonico();
+        identidades.putIfAbsent(
+                chave,
+                new IdentidadeSocialPendenteFinalizacao(identidadeFederada, contextoId)
+        );
+    }
+
     private void materializarVinculoSocialLocalSeNecessario(final CadastroConta cadastroConta,
+                                                            final OffsetDateTime instante) {
+        IdentidadeFederadaKeycloak identidadeFederada = new IdentidadeFederadaKeycloak(
+                resolverProvedorVinculoSocialPendente(cadastroConta),
+                cadastroConta.getVinculoSocialPendenteIdentificadorExterno(),
+                cadastroConta.getVinculoSocialPendenteNomeUsuarioExterno()
+        );
+        materializarVinculoSocialLocalSeNecessario(cadastroConta, identidadeFederada, instante);
+    }
+
+    private void materializarVinculoSocialLocalSeNecessario(final CadastroConta cadastroConta,
+                                                            final IdentidadeFederadaKeycloak identidadeFederada,
                                                             final OffsetDateTime instante) {
         if (pessoaRepositorio == null
                 || perfilIdentidadeRepositorio == null
@@ -1357,11 +1627,6 @@ public class CadastroContaInternaServico {
                 .orElseThrow(() -> new IllegalStateException("Pessoa não encontrada para materializar o vínculo social."));
         PerfilIdentidade perfil = perfilIdentidadeRepositorio.findBySub(cadastroConta.getSubjectRemoto())
                 .orElseThrow(() -> new IllegalStateException("Perfil não encontrado para materializar o vínculo social."));
-        IdentidadeFederadaKeycloak identidadeFederada = new IdentidadeFederadaKeycloak(
-                resolverProvedorVinculoSocialPendente(cadastroConta),
-                cadastroConta.getVinculoSocialPendenteIdentificadorExterno(),
-                cadastroConta.getVinculoSocialPendenteNomeUsuarioExterno()
-        );
 
         reconciliarFormaAcessoSocialLocal(pessoa, identidadeFederada, instante);
         reconciliarVinculoSocialLocal(perfil, identidadeFederada, instante);
@@ -1470,6 +1735,12 @@ public class CadastroContaInternaServico {
                         conviteOrganizacionalRepositorio.save(convite);
                     });
         }
+    }
+
+    private record IdentidadeSocialPendenteFinalizacao(
+            IdentidadeFederadaKeycloak identidadeFederada,
+            UUID contextoId
+    ) {
     }
 
     private void notificarTentativaCadastroContaExistente(final String emailNormalizado) {

@@ -32,15 +32,15 @@ public class LocalizadorPerfilSistemaProjetoPorEmailJdbc {
         return jdbcTemplate.query("""
                 SELECT u.id AS usuario_id,
                        lower(ufa.identificador_externo) AS email_normalizado,
-                       COALESCE(NULLIF(trim(cc.usuario), ''), lower(ufa.identificador_externo)) AS login_sugerido
+                       COALESCE(
+                           NULLIF(trim(uce.identificador_publico_cliente), ''),
+                           lower(ufa.identificador_externo)
+                       ) AS login_sugerido
                 FROM autenticacao.usuarios_formas_acesso ufa
                 JOIN autenticacao.usuarios u
                   ON u.id = ufa.usuario_id
                 JOIN autenticacao.usuarios_clientes_ecossistema uce
                   ON uce.usuario_id = ufa.usuario_id
-                LEFT JOIN cadastros_conta cc
-                  ON cc.cliente_ecossistema_id = uce.cliente_ecossistema_id
-                 AND lower(cc.email_principal) = lower(ufa.identificador_externo)
                 WHERE uce.cliente_ecossistema_id = :clienteEcossistemaId
                   AND uce.revogado_em IS NULL
                   AND ufa.desvinculado_em IS NULL
@@ -48,7 +48,6 @@ public class LocalizadorPerfilSistemaProjetoPorEmailJdbc {
                   AND ufa.provedor = 'EMAIL'
                   AND lower(ufa.identificador_externo) = :email
                 ORDER BY ufa.principal DESC,
-                         cc.atualizado_em DESC NULLS LAST,
                          uce.atualizado_em DESC
                 LIMIT 1
                 """, params, this::mapear).stream().findFirst();

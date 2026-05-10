@@ -1,14 +1,16 @@
 package com.eickrono.api.identidade.apresentacao.api;
 
 import com.eickrono.api.identidade.aplicacao.excecao.ApiAutenticadaException;
+import com.eickrono.api.identidade.aplicacao.modelo.CadastroContaSessaoSocialResolvido;
 import com.eickrono.api.identidade.aplicacao.modelo.ContextoPessoaPerfilSistema;
-import com.eickrono.api.identidade.aplicacao.modelo.IdentidadeFederadaKeycloak;
 import com.eickrono.api.identidade.aplicacao.modelo.DispositivoSessaoRegistrado;
+import com.eickrono.api.identidade.aplicacao.modelo.IdentidadeFederadaKeycloak;
 import com.eickrono.api.identidade.aplicacao.modelo.PerfilSistemaProjetoPorEmailResolvido;
 import com.eickrono.api.identidade.aplicacao.modelo.ProjetoFluxoPublicoResolvido;
 import com.eickrono.api.identidade.aplicacao.servico.ClienteContextoPessoaPerfilSistema;
 import com.eickrono.api.identidade.aplicacao.servico.ClienteAdministracaoVinculosSociaisKeycloak;
 import com.eickrono.api.identidade.aplicacao.servico.ContextoSocialPendenteJdbc;
+import com.eickrono.api.identidade.aplicacao.servico.LocalizadorCadastroContaSessaoSocialJdbc;
 import com.eickrono.api.identidade.aplicacao.servico.LocalizadorPerfilSistemaProjetoPorEmailJdbc;
 import com.eickrono.api.identidade.apresentacao.dto.ConfirmacaoRegistroRequest;
 import com.eickrono.api.identidade.apresentacao.dto.ConfirmacaoRegistroResponse;
@@ -19,12 +21,10 @@ import com.eickrono.api.identidade.apresentacao.dto.RegistroDispositivoRequest;
 import com.eickrono.api.identidade.apresentacao.dto.RegistroDispositivoResponse;
 import com.eickrono.api.identidade.apresentacao.dto.RegistroDispositivoSessaoResponse;
 import com.eickrono.api.identidade.apresentacao.dto.RevogarTokenRequest;
-import com.eickrono.api.identidade.dominio.modelo.CadastroConta;
 import com.eickrono.api.identidade.dominio.modelo.FormaAcesso;
 import com.eickrono.api.identidade.dominio.modelo.MotivoRevogacaoToken;
 import com.eickrono.api.identidade.dominio.modelo.Pessoa;
 import com.eickrono.api.identidade.dominio.modelo.TipoFormaAcesso;
-import com.eickrono.api.identidade.dominio.repositorio.CadastroContaRepositorio;
 import com.eickrono.api.identidade.dominio.repositorio.FormaAcessoRepositorio;
 import com.eickrono.api.identidade.dominio.repositorio.PessoaRepositorio;
 import com.eickrono.api.identidade.aplicacao.servico.OfflineDispositivoService;
@@ -64,9 +64,9 @@ public class RegistroDispositivoController {
     private final ClienteAdministracaoVinculosSociaisKeycloak clienteAdministracaoVinculosSociaisKeycloak;
     private final ContextoSocialPendenteJdbc contextoSocialPendenteJdbc;
     private final ResolvedorProjetoFluxoPublico resolvedorProjetoFluxoPublico;
+    private final LocalizadorCadastroContaSessaoSocialJdbc localizadorCadastroContaSessaoSocial;
     private final LocalizadorPerfilSistemaProjetoPorEmailJdbc localizadorPerfilSistemaProjetoPorEmail;
     private final FormaAcessoRepositorio formaAcessoRepositorio;
-    private final CadastroContaRepositorio cadastroContaRepositorio;
     private final PessoaRepositorio pessoaRepositorio;
 
     public RegistroDispositivoController(RegistroDispositivoService registroDispositivoService,
@@ -76,9 +76,9 @@ public class RegistroDispositivoController {
                                          ClienteAdministracaoVinculosSociaisKeycloak clienteAdministracaoVinculosSociaisKeycloak,
                                          ContextoSocialPendenteJdbc contextoSocialPendenteJdbc,
                                          ResolvedorProjetoFluxoPublico resolvedorProjetoFluxoPublico,
+                                         LocalizadorCadastroContaSessaoSocialJdbc localizadorCadastroContaSessaoSocial,
                                          LocalizadorPerfilSistemaProjetoPorEmailJdbc localizadorPerfilSistemaProjetoPorEmail,
                                          FormaAcessoRepositorio formaAcessoRepositorio,
-                                         CadastroContaRepositorio cadastroContaRepositorio,
                                          PessoaRepositorio pessoaRepositorio) {
         this.registroDispositivoService = registroDispositivoService;
         this.offlineDispositivoService = offlineDispositivoService;
@@ -87,9 +87,9 @@ public class RegistroDispositivoController {
         this.clienteAdministracaoVinculosSociaisKeycloak = clienteAdministracaoVinculosSociaisKeycloak;
         this.contextoSocialPendenteJdbc = contextoSocialPendenteJdbc;
         this.resolvedorProjetoFluxoPublico = resolvedorProjetoFluxoPublico;
+        this.localizadorCadastroContaSessaoSocial = localizadorCadastroContaSessaoSocial;
         this.localizadorPerfilSistemaProjetoPorEmail = localizadorPerfilSistemaProjetoPorEmail;
         this.formaAcessoRepositorio = formaAcessoRepositorio;
-        this.cadastroContaRepositorio = cadastroContaRepositorio;
         this.pessoaRepositorio = pessoaRepositorio;
     }
 
@@ -332,8 +332,8 @@ public class RegistroDispositivoController {
                 .filter(valor -> !valor.isEmpty())
                 .orElse(STATUS_LIBERADO);
         if (STATUS_LIBERADO.equalsIgnoreCase(statusPerfilSistema) || STATUS_ATIVO.equalsIgnoreCase(statusPerfilSistema)) {
-            Optional<CadastroConta> cadastroConta = resolverCadastroContaSessaoSocial(contexto, usuarioSub);
-            if (cadastroConta.map(CadastroConta::emailJaConfirmado).orElse(false)
+            Optional<CadastroContaSessaoSocialResolvido> cadastroConta = resolverCadastroContaSessaoSocial(contexto, usuarioSub);
+            if (cadastroConta.map(CadastroContaSessaoSocialResolvido::emailConfirmado).orElse(false)
                     || emailPrincipalLocalVerificado(contexto)) {
                 return;
             }
@@ -384,7 +384,7 @@ public class RegistroDispositivoController {
     private Map<String, Object> montarDetalhesContaNaoLiberadaSocial(final ContextoPessoaPerfilSistema contexto,
                                                                      final String usuarioSub,
                                                                      final String statusPerfilSistema,
-                                                                     final Optional<CadastroConta> cadastroConta,
+                                                                     final Optional<CadastroContaSessaoSocialResolvido> cadastroConta,
                                                                      final Boolean emailVerificado,
                                                                      final String motivoBloqueio,
                                                                      final String acaoSugerida) {
@@ -404,7 +404,7 @@ public class RegistroDispositivoController {
             detalhes.put("acaoSugerida", acaoSugerida);
         }
         cadastroConta
-                .map(cadastro -> cadastro.getCadastroId().toString())
+                .map(cadastro -> cadastro.cadastroId().toString())
                 .ifPresent(cadastroId -> detalhes.put("cadastroId", cadastroId));
         return detalhes;
     }
@@ -418,17 +418,17 @@ public class RegistroDispositivoController {
                 || normalizado.equals("SUSPENSO");
     }
 
-    private Optional<CadastroConta> resolverCadastroContaSessaoSocial(final ContextoPessoaPerfilSistema contexto,
-                                                                      final String usuarioSub) {
-        Optional<CadastroConta> cadastroPorContexto = Optional.ofNullable(contexto.sub())
+    private Optional<CadastroContaSessaoSocialResolvido> resolverCadastroContaSessaoSocial(final ContextoPessoaPerfilSistema contexto,
+                                                                                            final String usuarioSub) {
+        Optional<CadastroContaSessaoSocialResolvido> cadastroPorContexto = Optional.ofNullable(contexto.sub())
                 .filter(StringUtils::hasText)
-                .flatMap(cadastroContaRepositorio::findBySubjectRemoto);
+                .flatMap(localizadorCadastroContaSessaoSocial::localizarPorSub);
         if (cadastroPorContexto.isPresent()) {
             return cadastroPorContexto;
         }
         return Optional.ofNullable(usuarioSub)
                 .filter(StringUtils::hasText)
-                .flatMap(cadastroContaRepositorio::findBySubjectRemoto);
+                .flatMap(localizadorCadastroContaSessaoSocial::localizarPorSub);
     }
 
     private boolean emailPrincipalLocalVerificado(final ContextoPessoaPerfilSistema contexto) {

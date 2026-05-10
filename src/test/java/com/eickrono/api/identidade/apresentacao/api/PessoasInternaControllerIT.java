@@ -56,6 +56,7 @@ class PessoasInternaControllerIT {
                                 {
                                   "sub": "sub-pessoa-interna-001",
                                   "email": "confirmado@eickrono.com",
+                                  "nomeCompleto": "Pessoa Confirmada",
                                   "confirmadoEm": "2026-05-03T03:10:00Z"
                                 }
                                 """))
@@ -80,6 +81,7 @@ class PessoasInternaControllerIT {
                                 {
                                   "sub": "sub-pessoa-interna-002",
                                   "email": "confirmado@eickrono.com",
+                                  "nomeCompleto": "Pessoa Confirmada",
                                   "confirmadoEm": "2026-05-03T03:10:00Z"
                                 }
                                 """))
@@ -88,8 +90,8 @@ class PessoasInternaControllerIT {
 
     private RequestPostProcessor jwtInternoAutenticacao() {
         return jwt().jwt(jwt -> jwt
-                .subject("service-account-servidor-autorizacao-interno")
-                .claim("azp", "servidor-autorizacao-interno")
-                .claim("preferred_username", "service-account-servidor-autorizacao-interno"));
+                .subject("service-account-eickrono-autenticacao-interno")
+                .claim("azp", "eickrono-autenticacao-interno")
+                .claim("preferred_username", "service-account-eickrono-autenticacao-interno"));
     }
 }

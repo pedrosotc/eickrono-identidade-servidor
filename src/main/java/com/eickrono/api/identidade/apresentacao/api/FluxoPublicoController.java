@@ -8,6 +8,7 @@ import com.eickrono.api.identidade.aplicacao.modelo.ConviteOrganizacionalValidad
 import com.eickrono.api.identidade.aplicacao.modelo.ContextoSolicitacaoFluxoPublico;
 import com.eickrono.api.identidade.aplicacao.modelo.ContextoPessoaPerfilSistema;
 import com.eickrono.api.identidade.aplicacao.modelo.DispositivoSessaoRegistrado;
+import com.eickrono.api.identidade.aplicacao.modelo.PerfilSistemaProjetoPorEmailResolvido;
 import com.eickrono.api.identidade.aplicacao.modelo.RecuperacaoSenhaIniciada;
 import com.eickrono.api.identidade.aplicacao.modelo.SessaoInternaAutenticada;
 import com.eickrono.api.identidade.aplicacao.modelo.StatusCadastroPublico;
@@ -19,10 +20,13 @@ import com.eickrono.api.identidade.aplicacao.servico.CadastroContaInternaServico
 import com.eickrono.api.identidade.aplicacao.servico.ClienteContextoPessoaPerfilSistema;
 import com.eickrono.api.identidade.aplicacao.servico.ContextoSocialPendenteJdbc;
 import com.eickrono.api.identidade.aplicacao.servico.ConviteOrganizacionalService;
+import com.eickrono.api.identidade.aplicacao.servico.LocalizadorPerfilSistemaProjetoPorEmailJdbc;
 import com.eickrono.api.identidade.aplicacao.servico.RecuperacaoSenhaService;
 import com.eickrono.api.identidade.aplicacao.servico.RegistroDispositivoLoginSilenciosoService;
 import com.eickrono.api.identidade.aplicacao.servico.ResolvedorProjetoFluxoPublicoJdbc;
 import com.eickrono.api.identidade.dominio.modelo.CadastroConta;
+import com.eickrono.api.identidade.dominio.modelo.ProvedorVinculoSocial;
+import com.eickrono.api.identidade.dominio.modelo.TipoFormaAcesso;
 import com.eickrono.api.identidade.apresentacao.dto.fluxo.CadastroApiRequest;
 import com.eickrono.api.identidade.apresentacao.dto.fluxo.CadastroApiResposta;
 import com.eickrono.api.identidade.apresentacao.dto.fluxo.ConfirmacaoCodigoRecuperacaoSenhaApiResposta;
@@ -39,9 +43,13 @@ import com.eickrono.api.identidade.apresentacao.dto.fluxo.RenovarSessaoApiReques
 import com.eickrono.api.identidade.apresentacao.dto.fluxo.RedefinirSenhaRecuperacaoApiRequest;
 import com.eickrono.api.identidade.apresentacao.dto.fluxo.SessaoApiResposta;
 import com.eickrono.api.identidade.apresentacao.dto.fluxo.StatusCadastroPublicoApiResposta;
+import com.eickrono.api.identidade.apresentacao.dto.fluxo.VinculoSocialPendenteApiRequest;
+import com.eickrono.api.identidade.dominio.repositorio.FormaAcessoRepositorio;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.time.LocalDate;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Locale;
 import java.util.Objects;
@@ -60,6 +68,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.util.StringUtils;
 
 @RestController
 @RequestMapping("/api/publica")
@@ -83,6 +92,8 @@ public class FluxoPublicoController {
     private final RecuperacaoSenhaService recuperacaoSenhaService;
     private final RegistroDispositivoLoginSilenciosoService registroDispositivoLoginSilenciosoService;
     private final ResolvedorProjetoFluxoPublicoJdbc resolvedorProjetoFluxoPublico;
+    private final LocalizadorPerfilSistemaProjetoPorEmailJdbc localizadorPerfilSistemaProjetoPorEmail;
+    private final FormaAcessoRepositorio formaAcessoRepositorio;
 
     public FluxoPublicoController(final CadastroContaInternaServico cadastroContaInternaServico,
                                   final AtestacaoAppServico atestacaoAppServico,
@@ -93,7 +104,9 @@ public class FluxoPublicoController {
                                   final ConviteOrganizacionalService conviteOrganizacionalService,
                                   final RecuperacaoSenhaService recuperacaoSenhaService,
                                   final RegistroDispositivoLoginSilenciosoService registroDispositivoLoginSilenciosoService,
-                                  final ResolvedorProjetoFluxoPublicoJdbc resolvedorProjetoFluxoPublico) {
+                                  final ResolvedorProjetoFluxoPublicoJdbc resolvedorProjetoFluxoPublico,
+                                  final LocalizadorPerfilSistemaProjetoPorEmailJdbc localizadorPerfilSistemaProjetoPorEmail,
+                                  final FormaAcessoRepositorio formaAcessoRepositorio) {
         this.cadastroContaInternaServico = Objects.requireNonNull(
                 cadastroContaInternaServico, "cadastroContaInternaServico é obrigatório");
         this.atestacaoAppServico = Objects.requireNonNull(atestacaoAppServico, "atestacaoAppServico é obrigatório");
@@ -113,6 +126,14 @@ public class FluxoPublicoController {
                 registroDispositivoLoginSilenciosoService, "registroDispositivoLoginSilenciosoService é obrigatório");
         this.resolvedorProjetoFluxoPublico = Objects.requireNonNull(
                 resolvedorProjetoFluxoPublico, "resolvedorProjetoFluxoPublico é obrigatório");
+        this.localizadorPerfilSistemaProjetoPorEmail = Objects.requireNonNull(
+                localizadorPerfilSistemaProjetoPorEmail,
+                "localizadorPerfilSistemaProjetoPorEmail é obrigatório"
+        );
+        this.formaAcessoRepositorio = Objects.requireNonNull(
+                formaAcessoRepositorio,
+                "formaAcessoRepositorio é obrigatório"
+        );
     }
 
     @PostMapping("/cadastros")
@@ -180,6 +201,7 @@ public class FluxoPublicoController {
                     servletRequest.getHeader("User-Agent"),
                     construirContextoSolicitacao(requisicao)
             );
+            atualizarContextosSociaisPendentesDoCadastro(requisicao);
             LOGGER.info(
                     "cadastro_publico_concluido cadastroId={} usuario={} email={} status={} proximoPasso={}",
                     cadastro.cadastroId(),
@@ -227,6 +249,55 @@ public class FluxoPublicoController {
             );
             throw exception;
         }
+    }
+
+    private void atualizarContextosSociaisPendentesDoCadastro(final CadastroApiRequest requisicao) {
+        List<VinculoSocialPendenteApiRequest> vinculos = resolverVinculosSociaisPendentesDoCadastro(requisicao);
+        if (vinculos.isEmpty()) {
+            return;
+        }
+        ProjetoFluxoPublicoResolvido projeto = resolvedorProjetoFluxoPublico.resolverAtivo(requisicao.aplicacaoId());
+        for (VinculoSocialPendenteApiRequest vinculo : vinculos) {
+            contextoSocialPendenteJdbc.registrarOuAtualizar(
+                    projeto,
+                    vinculo.provedor(),
+                    vinculo.identificadorExterno(),
+                    StringUtils.hasText(vinculo.email()) ? vinculo.email() : requisicao.emailPrincipal(),
+                    vinculo.nomeUsuarioExterno(),
+                    vinculo.nomeCompleto(),
+                    vinculo.urlAvatarExterno(),
+                    null,
+                    null
+            );
+        }
+    }
+
+    private List<VinculoSocialPendenteApiRequest> resolverVinculosSociaisPendentesDoCadastro(
+            final CadastroApiRequest requisicao) {
+        LinkedHashMap<String, VinculoSocialPendenteApiRequest> vinculos = new LinkedHashMap<>();
+        adicionarVinculoSocialPendenteCadastro(vinculos, requisicao.vinculoSocialPendente());
+        if (requisicao.vinculosSociaisPendentes() != null) {
+            for (VinculoSocialPendenteApiRequest vinculo : requisicao.vinculosSociaisPendentes()) {
+                adicionarVinculoSocialPendenteCadastro(vinculos, vinculo);
+            }
+        }
+        return List.copyOf(vinculos.values());
+    }
+
+    private static void adicionarVinculoSocialPendenteCadastro(
+            final LinkedHashMap<String, VinculoSocialPendenteApiRequest> vinculos,
+            final VinculoSocialPendenteApiRequest vinculo) {
+        if (vinculo == null
+                || !StringUtils.hasText(vinculo.provedor())
+                || !StringUtils.hasText(vinculo.identificadorExterno())) {
+            return;
+        }
+        vinculos.put(
+                vinculo.provedor().trim().toLowerCase(Locale.ROOT)
+                        + "::"
+                        + vinculo.identificadorExterno().trim(),
+                vinculo
+        );
     }
 
     @GetMapping("/cadastros/usuarios/disponibilidade")
@@ -588,10 +659,31 @@ public class FluxoPublicoController {
             throw exception;
         }
 
-        SessaoInternaAutenticada sessao = autenticacaoSessaoInternaServico.autenticarSocial(
-                provedorNormalizado,
-                requisicao.tokenExterno()
-        );
+        SessaoInternaAutenticada sessao;
+        try {
+            sessao = autenticacaoSessaoInternaServico.autenticarSocial(
+                    provedorNormalizado,
+                    requisicao.tokenExterno()
+            );
+        } catch (ResponseStatusException exception) {
+            if (exception.getStatusCode() == HttpStatus.UNAUTHORIZED) {
+                if (ehConflitoVinculoSocialSocial(exception)) {
+                    throw resolverConflitoAutenticacaoSocial(requisicao, provedorNormalizado);
+                }
+                LOGGER.warn(
+                        "login_social_publico_rejeitado provedor={} status={} motivo={}",
+                        provedorNormalizado,
+                        exception.getStatusCode().value(),
+                        exception.getReason()
+                );
+                throw new FluxoPublicoException(
+                        HttpStatus.UNAUTHORIZED,
+                        "autenticacao_social_invalida",
+                        "Não foi possível concluir a autenticação com a rede social informada."
+                );
+            }
+            throw exception;
+        }
         LOGGER.info(
                 "login_social_publico_sessao_emitida provedor={} autenticado={} expiresIn={}",
                 provedorNormalizado,
@@ -612,6 +704,149 @@ public class FluxoPublicoController {
                 false,
                 true
         );
+    }
+
+    private boolean ehConflitoVinculoSocialSocial(final ResponseStatusException exception) {
+        String motivo = Objects.requireNonNullElse(exception.getReason(), "")
+                .trim()
+                .toLowerCase(Locale.ROOT);
+        return motivo.contains("user already exists")
+                || motivo.contains("federated_identity_account_exists");
+    }
+
+    private FluxoPublicoException resolverConflitoAutenticacaoSocial(
+            final CriarSessaoSocialApiRequest requisicao,
+            final String provedorNormalizado) {
+        String identificadorExterno = normalizarTexto(requisicao.identificadorExterno());
+        String emailSocial = normalizarEmail(requisicao.email());
+        if (StringUtils.hasText(identificadorExterno)
+                && identidadeSocialJaVinculadaNoSistema(provedorNormalizado, identificadorExterno)) {
+            return new FluxoPublicoException(
+                    HttpStatus.CONFLICT,
+                    "vinculo_social_pertence_a_outra_conta",
+                    "Esta rede social já está vinculada a outra conta e não pode ser vinculada novamente.",
+                    montarDetalhesConflitoVinculoSocial(
+                            provedorNormalizado,
+                            identificadorExterno,
+                            emailSocial,
+                            "SUPORTE"
+                    )
+            );
+        }
+        if (!StringUtils.hasText(emailSocial)) {
+            return new FluxoPublicoException(
+                    HttpStatus.CONFLICT,
+                    "conflito_vinculo_social_ambiguo",
+                    "Não foi possível determinar automaticamente se esta rede social deve abrir cadastro ou ser vinculada. Tente novamente ou procure suporte.",
+                    montarDetalhesConflitoVinculoSocial(
+                            provedorNormalizado,
+                            identificadorExterno,
+                            null,
+                            "SUPORTE"
+                    )
+            );
+        }
+
+        ProjetoFluxoPublicoResolvido projeto = resolvedorProjetoFluxoPublico.resolverAtivo(requisicao.aplicacaoId());
+        Optional<PerfilSistemaProjetoPorEmailResolvido> contaExistente =
+                localizadorPerfilSistemaProjetoPorEmail.localizar(
+                        projeto.clienteEcossistemaId(),
+                        emailSocial
+                );
+        Map<String, Object> detalhes = new java.util.LinkedHashMap<>();
+        detalhes.put("provedor", provedorNormalizado);
+        if (StringUtils.hasText(identificadorExterno)) {
+            detalhes.put("identificadorExterno", identificadorExterno);
+        }
+        detalhes.put("email", emailSocial);
+        if (StringUtils.hasText(requisicao.nomeUsuarioExterno())) {
+            detalhes.put("nomeUsuarioExterno", requisicao.nomeUsuarioExterno().trim());
+        }
+        if (StringUtils.hasText(requisicao.nomeCompleto())) {
+            detalhes.put("nomeExibicaoExterno", requisicao.nomeCompleto().trim());
+        }
+        if (StringUtils.hasText(requisicao.urlAvatarExterno())) {
+            detalhes.put("urlAvatarExterno", requisicao.urlAvatarExterno().trim());
+        }
+        if (StringUtils.hasText(identificadorExterno)) {
+            UUID contextoSocialPendenteId = contextoSocialPendenteJdbc.registrarOuAtualizar(
+                    projeto,
+                    provedorNormalizado,
+                    identificadorExterno,
+                    emailSocial,
+                    requisicao.nomeUsuarioExterno(),
+                    requisicao.nomeCompleto(),
+                    requisicao.urlAvatarExterno(),
+                    contaExistente.map(PerfilSistemaProjetoPorEmailResolvido::perfilSistemaId).orElse(null),
+                    contaExistente.map(PerfilSistemaProjetoPorEmailResolvido::identificadorPublicoSistemaSugerido)
+                            .orElse(null)
+            );
+            detalhes.put("contextoSocialPendenteId", contextoSocialPendenteId);
+        }
+        if (contaExistente.isPresent()) {
+            detalhes.put("acaoSugerida", "ENTRAR_E_VINCULAR");
+            detalhes.put("emailContaExistente", contaExistente.get().emailNormalizado());
+            detalhes.put("loginSugerido", contaExistente.get().identificadorPublicoSistemaSugerido());
+            return new FluxoPublicoException(
+                    HttpStatus.CONFLICT,
+                    "social_sem_conta_local",
+                    "Ja existe uma conta neste projeto com o mesmo e-mail desta rede social. Deseja entrar e vincular agora?",
+                    detalhes
+            );
+        }
+        detalhes.put("acaoSugerida", "ABRIR_CADASTRO");
+        return new FluxoPublicoException(
+                HttpStatus.CONFLICT,
+                "social_sem_conta_local",
+                "Esta rede social foi autenticada com sucesso, mas ainda nao esta ligada a uma conta local. Deseja abrir o cadastro com os dados recebidos?",
+                detalhes
+        );
+    }
+
+    private boolean identidadeSocialJaVinculadaNoSistema(final String provedorNormalizado,
+                                                         final String identificadorExterno) {
+        String aliasFormaAcesso = ProvedorVinculoSocial.fromAlias(provedorNormalizado)
+                .map(ProvedorVinculoSocial::getAliasFormaAcesso)
+                .orElse(provedorNormalizado.trim().toUpperCase(Locale.ROOT));
+        return formaAcessoRepositorio.findByTipoAndProvedorAndIdentificador(
+                TipoFormaAcesso.SOCIAL,
+                aliasFormaAcesso,
+                identificadorExterno
+        ).isPresent();
+    }
+
+    private Map<String, Object> montarDetalhesConflitoVinculoSocial(final String provedor,
+                                                                    final String identificadorExterno,
+                                                                    final String email,
+                                                                    final String acaoSugerida) {
+        Map<String, Object> detalhes = new java.util.LinkedHashMap<>();
+        if (StringUtils.hasText(provedor)) {
+            detalhes.put("provedor", provedor);
+        }
+        if (StringUtils.hasText(identificadorExterno)) {
+            detalhes.put("identificadorExterno", identificadorExterno);
+        }
+        if (StringUtils.hasText(email)) {
+            detalhes.put("email", email);
+        }
+        if (StringUtils.hasText(acaoSugerida)) {
+            detalhes.put("acaoSugerida", acaoSugerida);
+        }
+        return detalhes;
+    }
+
+    private String normalizarTexto(final String valor) {
+        if (!StringUtils.hasText(valor)) {
+            return null;
+        }
+        return valor.trim();
+    }
+
+    private String normalizarEmail(final String valor) {
+        if (!StringUtils.hasText(valor)) {
+            return null;
+        }
+        return valor.trim().toLowerCase(Locale.ROOT);
     }
 
     private static String resolverIdentificadorAplicativo(final CriarSessaoSocialApiRequest requisicao) {

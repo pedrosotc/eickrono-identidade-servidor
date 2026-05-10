@@ -9,6 +9,7 @@ import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.time.LocalDate;
+import java.util.List;
 
 public record CadastroApiRequest(
         @NotBlank String aplicacaoId,
@@ -35,6 +36,7 @@ public record CadastroApiRequest(
         @AssertTrue boolean aceitouPrivacidade,
         @NotNull PlataformaAtestacaoApp plataformaApp,
         @Valid VinculoSocialPendenteApiRequest vinculoSocialPendente,
+        List<@Valid VinculoSocialPendenteApiRequest> vinculosSociaisPendentes,
         @Valid @NotNull AtestacaoOperacaoApiRequest atestacao,
         @Valid @NotNull SegurancaAplicativoApiRequest segurancaAplicativo
 ) {

@@ -48,7 +48,7 @@ public class PerfilDominioBackchannelProperties {
 
         private String urlBase = "http://localhost:8080";
         private String realm = "eickrono";
-        private String clientId = "autenticacao-servidor";
+        private String clientId = "eickrono-autenticacao-interno";
         private String clientSecret = "CHANGE_ME";
         private Duration timeout = Duration.ofSeconds(5);
 

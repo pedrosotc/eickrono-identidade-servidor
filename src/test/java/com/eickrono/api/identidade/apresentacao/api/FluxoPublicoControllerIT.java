@@ -14,6 +14,7 @@ import com.eickrono.api.identidade.aplicacao.modelo.CadastroInternoRealizado;
 import com.eickrono.api.identidade.aplicacao.modelo.ConfirmacaoEmailCadastroPublicoRealizada;
 import com.eickrono.api.identidade.aplicacao.modelo.ConviteOrganizacionalValidado;
 import com.eickrono.api.identidade.aplicacao.modelo.ContextoSolicitacaoFluxoPublico;
+import com.eickrono.api.identidade.aplicacao.modelo.PerfilSistemaProjetoPorEmailResolvido;
 import com.eickrono.api.identidade.aplicacao.modelo.ProjetoFluxoPublicoResolvido;
 import com.eickrono.api.identidade.aplicacao.servico.AtestacaoAppServico;
 import com.eickrono.api.identidade.aplicacao.servico.AvaliacaoSegurancaAplicativoService;
@@ -22,6 +23,7 @@ import com.eickrono.api.identidade.aplicacao.servico.CadastroContaInternaServico
 import com.eickrono.api.identidade.aplicacao.servico.ClienteContextoPessoaPerfilSistema;
 import com.eickrono.api.identidade.aplicacao.servico.ContextoSocialPendenteJdbc;
 import com.eickrono.api.identidade.aplicacao.servico.ConviteOrganizacionalService;
+import com.eickrono.api.identidade.aplicacao.servico.LocalizadorPerfilSistemaProjetoPorEmailJdbc;
 import com.eickrono.api.identidade.aplicacao.servico.RecuperacaoSenhaService;
 import com.eickrono.api.identidade.aplicacao.servico.RegistroDispositivoLoginSilenciosoService;
 import com.eickrono.api.identidade.aplicacao.servico.ResolvedorProjetoFluxoPublicoJdbc;
@@ -33,7 +35,9 @@ import com.eickrono.api.identidade.aplicacao.modelo.StatusCadastroPublico;
 import com.eickrono.api.identidade.dominio.modelo.CanalValidacaoTelefoneCadastro;
 import com.eickrono.api.identidade.dominio.modelo.CadastroConta;
 import com.eickrono.api.identidade.dominio.modelo.ProvedorVinculoSocial;
+import com.eickrono.api.identidade.dominio.modelo.TipoFormaAcesso;
 import com.eickrono.api.identidade.dominio.modelo.TipoPessoaCadastro;
+import com.eickrono.api.identidade.dominio.repositorio.FormaAcessoRepositorio;
 import com.eickrono.api.identidade.support.InfraestruturaTesteIdentidade;
 import java.time.OffsetDateTime;
 import java.util.Optional;
@@ -96,6 +100,12 @@ class FluxoPublicoControllerIT {
     @MockBean
     private ResolvedorProjetoFluxoPublicoJdbc resolvedorProjetoFluxoPublico;
 
+    @MockBean
+    private LocalizadorPerfilSistemaProjetoPorEmailJdbc localizadorPerfilSistemaProjetoPorEmail;
+
+    @MockBean
+    private FormaAcessoRepositorio formaAcessoRepositorio;
+
     @BeforeEach
     void setUp() {
         when(atestacaoAppServico.validarComprovante(org.mockito.ArgumentMatchers.any()))
@@ -134,6 +144,10 @@ class FluxoPublicoControllerIT {
                         false
                 ));
         when(contextoSocialPendenteJdbc.buscarAtivo(isNull(), eq(7L)))
+                .thenReturn(Optional.empty());
+        when(localizadorPerfilSistemaProjetoPorEmail.localizar(any(), anyString()))
+                .thenReturn(Optional.empty());
+        when(formaAcessoRepositorio.findByTipoAndProvedorAndIdentificador(any(), anyString(), anyString()))
                 .thenReturn(Optional.empty());
     }
 
@@ -283,6 +297,198 @@ class FluxoPublicoControllerIT {
                                 """))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.codigo").value("credenciais_invalidas"));
+    }
+
+    @Test
+    void deveMapearFalhaDeAutenticacaoSocialSemUsarCredenciaisInvalidas() throws Exception {
+        when(autenticacaoSessaoInternaServico.autenticarSocial("google", "google-access-token"))
+                .thenThrow(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Token exchange rejected"));
+
+        mockMvc.perform(post("/api/publica/sessoes/sociais")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "aplicacaoId": "eickrono-thimisu-app",
+                                  "provedor": "google",
+                                  "tokenExterno": "google-access-token",
+                                  "dispositivo": {
+                                    "plataforma": "IOS",
+                                    "identificadorInstalacao": "instalacao-social",
+                                    "modelo": "simulador",
+                                    "sistemaOperacional": "ios",
+                                    "versaoSistema": "18",
+                                    "versaoApp": "1.0.0"
+                                  },
+                                  "atestacao": {
+                                    "plataforma": "IOS",
+                                    "provedor": "APPLE_APP_ATTEST",
+                                    "tipoComprovante": "OBJETO_ASSERCAO",
+                                    "identificadorDesafio": "desafio",
+                                    "desafioBase64": "ZGVzYWZpbw==",
+                                    "conteudoComprovante": "Y29tcHJvdmFudGU=",
+                                    "geradoEm": "2026-03-26T20:00:00Z",
+                                    "chaveId": "chave"
+                                  },
+                                  "segurancaAplicativo": {
+                                    "plataforma": "IOS",
+                                    "provedorAtestacao": "APPLE_APP_ATTEST",
+                                    "rootOuJailbreak": false,
+                                    "debuggerDetectado": false,
+                                    "hookingSuspeito": false,
+                                    "tamperSuspeito": false,
+                                    "riscoCapturaTela": false,
+                                    "assinaturaValida": true,
+                                    "identidadeAplicativoValida": true,
+                                    "sinaisRisco": [],
+                                    "scoreRiscoLocal": 0,
+                                    "bundleIdentifier": "com.eickrono.thimisu",
+                                    "teamIdentifier": "TEAM123"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.codigo").value("autenticacao_social_invalida"))
+                .andExpect(jsonPath("$.mensagem")
+                        .value("Não foi possível concluir a autenticação com a rede social informada."));
+    }
+
+    @Test
+    void deveClassificarConflitoSocialComoEntrarEVincularQuandoEmailJaPossuiContaNoProjeto() throws Exception {
+        UUID contextoId = UUID.fromString("99999999-9999-9999-9999-999999999999");
+        when(autenticacaoSessaoInternaServico.autenticarSocial("apple", "apple-id-token"))
+                .thenThrow(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User already exists"));
+        when(localizadorPerfilSistemaProjetoPorEmail.localizar(7L, "estudiantemeduba@gmail.com"))
+                .thenReturn(Optional.of(new PerfilSistemaProjetoPorEmailResolvido(
+                        UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+                        "estudiantemeduba@gmail.com",
+                        "pedroso_tc"
+                )));
+        when(contextoSocialPendenteJdbc.registrarOuAtualizar(
+                any(ProjetoFluxoPublicoResolvido.class),
+                eq("apple"),
+                eq("apple-user-123"),
+                eq("estudiantemeduba@gmail.com"),
+                eq("estudiantemeduba"),
+                eq("Estudiante Meduba"),
+                eq("https://img/apple.png"),
+                eq(UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")),
+                eq("pedroso_tc")
+        )).thenReturn(contextoId);
+
+        mockMvc.perform(post("/api/publica/sessoes/sociais")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "aplicacaoId": "eickrono-thimisu-app",
+                                  "provedor": "apple",
+                                  "tokenExterno": "apple-id-token",
+                                  "identificadorExterno": "apple-user-123",
+                                  "email": "estudiantemeduba@gmail.com",
+                                  "nomeUsuarioExterno": "estudiantemeduba",
+                                  "nomeCompleto": "Estudiante Meduba",
+                                  "urlAvatarExterno": "https://img/apple.png",
+                                  "dispositivo": {
+                                    "plataforma": "IOS",
+                                    "identificadorInstalacao": "instalacao-social",
+                                    "modelo": "simulador",
+                                    "sistemaOperacional": "ios",
+                                    "versaoSistema": "18",
+                                    "versaoApp": "1.0.0"
+                                  },
+                                  "atestacao": {
+                                    "plataforma": "IOS",
+                                    "provedor": "APPLE_APP_ATTEST",
+                                    "tipoComprovante": "OBJETO_ASSERCAO",
+                                    "identificadorDesafio": "desafio",
+                                    "desafioBase64": "ZGVzYWZpbw==",
+                                    "conteudoComprovante": "Y29tcHJvdmFudGU=",
+                                    "geradoEm": "2026-03-26T20:00:00Z",
+                                    "chaveId": "chave"
+                                  },
+                                  "segurancaAplicativo": {
+                                    "plataforma": "IOS",
+                                    "provedorAtestacao": "APPLE_APP_ATTEST",
+                                    "rootOuJailbreak": false,
+                                    "debuggerDetectado": false,
+                                    "hookingSuspeito": false,
+                                    "tamperSuspeito": false,
+                                    "riscoCapturaTela": false,
+                                    "assinaturaValida": true,
+                                    "identidadeAplicativoValida": true,
+                                    "sinaisRisco": [],
+                                    "scoreRiscoLocal": 0,
+                                    "bundleIdentifier": "com.eickrono.thimisu",
+                                    "teamIdentifier": "TEAM123"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.codigo").value("social_sem_conta_local"))
+                .andExpect(jsonPath("$.detalhes.acaoSugerida").value("ENTRAR_E_VINCULAR"))
+                .andExpect(jsonPath("$.detalhes.loginSugerido").value("pedroso_tc"))
+                .andExpect(jsonPath("$.detalhes.emailContaExistente").value("estudiantemeduba@gmail.com"))
+                .andExpect(jsonPath("$.detalhes.contextoSocialPendenteId").value(contextoId.toString()));
+    }
+
+    @Test
+    void deveClassificarConflitoSocialComoPertencenteAOutraContaQuandoIdentidadeJaEstaVinculada() throws Exception {
+        when(autenticacaoSessaoInternaServico.autenticarSocial("apple", "apple-id-token"))
+                .thenThrow(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User already exists"));
+        when(formaAcessoRepositorio.findByTipoAndProvedorAndIdentificador(
+                TipoFormaAcesso.SOCIAL,
+                "APPLE",
+                "apple-user-123"
+        )).thenReturn(Optional.of(org.mockito.Mockito.mock(com.eickrono.api.identidade.dominio.modelo.FormaAcesso.class)));
+
+        mockMvc.perform(post("/api/publica/sessoes/sociais")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "aplicacaoId": "eickrono-thimisu-app",
+                                  "provedor": "apple",
+                                  "tokenExterno": "apple-id-token",
+                                  "identificadorExterno": "apple-user-123",
+                                  "email": "estudiantemeduba@gmail.com",
+                                  "nomeUsuarioExterno": "estudiantemeduba",
+                                  "nomeCompleto": "Estudiante Meduba",
+                                  "dispositivo": {
+                                    "plataforma": "IOS",
+                                    "identificadorInstalacao": "instalacao-social",
+                                    "modelo": "simulador",
+                                    "sistemaOperacional": "ios",
+                                    "versaoSistema": "18",
+                                    "versaoApp": "1.0.0"
+                                  },
+                                  "atestacao": {
+                                    "plataforma": "IOS",
+                                    "provedor": "APPLE_APP_ATTEST",
+                                    "tipoComprovante": "OBJETO_ASSERCAO",
+                                    "identificadorDesafio": "desafio",
+                                    "desafioBase64": "ZGVzYWZpbw==",
+                                    "conteudoComprovante": "Y29tcHJvdmFudGU=",
+                                    "geradoEm": "2026-03-26T20:00:00Z",
+                                    "chaveId": "chave"
+                                  },
+                                  "segurancaAplicativo": {
+                                    "plataforma": "IOS",
+                                    "provedorAtestacao": "APPLE_APP_ATTEST",
+                                    "rootOuJailbreak": false,
+                                    "debuggerDetectado": false,
+                                    "hookingSuspeito": false,
+                                    "tamperSuspeito": false,
+                                    "riscoCapturaTela": false,
+                                    "assinaturaValida": true,
+                                    "identidadeAplicativoValida": true,
+                                    "sinaisRisco": [],
+                                    "scoreRiscoLocal": 0,
+                                    "bundleIdentifier": "com.eickrono.thimisu",
+                                    "teamIdentifier": "TEAM123"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.codigo").value("vinculo_social_pertence_a_outra_conta"))
+                .andExpect(jsonPath("$.detalhes.acaoSugerida").value("SUPORTE"));
     }
 
     @Test
@@ -693,6 +899,136 @@ class FluxoPublicoControllerIT {
                         "Eickrono",
                         "HML"
                 ))
+        );
+    }
+
+    @Test
+    void deveRegistrarTodosOsVinculosSociaisPendentesAoCriarCadastroPublico() throws Exception {
+        doReturn(new CadastroInternoRealizado(
+                UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+                "sub-ana",
+                "ana@eickrono.com",
+                true
+        )).when(cadastroContaInternaServico).cadastrarPublico(
+                any(TipoPessoaCadastro.class),
+                anyString(),
+                nullable(String.class),
+                anyString(),
+                any(com.eickrono.api.identidade.dominio.modelo.SexoPessoaCadastro.class),
+                anyString(),
+                any(java.time.LocalDate.class),
+                anyString(),
+                anyString(),
+                any(CanalValidacaoTelefoneCadastro.class),
+                anyString(),
+                nullable(VinculoSocialPendenteCadastro.class),
+                nullable(ConviteOrganizacionalValidado.class),
+                anyString(),
+                anyString(),
+                anyString(),
+                nullable(String.class),
+                nullable(ContextoSolicitacaoFluxoPublico.class)
+        );
+
+        mockMvc.perform(post("/api/publica/cadastros")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-Forwarded-For", "127.0.0.1")
+                        .content("""
+                                {
+                                  "aplicacaoId": "eickrono-thimisu-app",
+                                  "tipoPessoa": "FISICA",
+                                  "nomeCompleto": "Ana Souza",
+                                  "usuario": "ana.souza",
+                                  "sexo": "FEMININO",
+                                  "paisNascimento": "BR",
+                                  "dataNascimento": "1990-05-10",
+                                  "emailPrincipal": "ana@eickrono.com",
+                                  "telefone": "+5511999999999",
+                                  "tipoValidacaoTelefone": "SMS",
+                                  "senha": "SenhaForte@123",
+                                  "confirmacaoSenha": "SenhaForte@123",
+                                  "aceitouTermos": true,
+                                  "aceitouPrivacidade": true,
+                                  "plataformaApp": "IOS",
+                                  "vinculoSocialPendente": {
+                                    "provedor": "google",
+                                    "identificadorExterno": "google-user-123",
+                                    "contextoSocialPendenteId": "google-contexto-1",
+                                    "nomeUsuarioExterno": "ana.google",
+                                    "email": "ana@eickrono.com",
+                                    "nomeCompleto": "Ana Google",
+                                    "urlAvatarExterno": "https://img/google.png"
+                                  },
+                                  "vinculosSociaisPendentes": [
+                                    {
+                                      "provedor": "google",
+                                      "identificadorExterno": "google-user-123",
+                                      "contextoSocialPendenteId": "google-contexto-1",
+                                      "nomeUsuarioExterno": "ana.google",
+                                      "email": "ana@eickrono.com",
+                                      "nomeCompleto": "Ana Google",
+                                      "urlAvatarExterno": "https://img/google.png"
+                                    },
+                                    {
+                                      "provedor": "apple",
+                                      "identificadorExterno": "apple-user-123",
+                                      "contextoSocialPendenteId": "apple-contexto-1",
+                                      "nomeUsuarioExterno": "ana.apple",
+                                      "email": "ana@eickrono.com",
+                                      "nomeCompleto": "Ana Apple",
+                                      "urlAvatarExterno": "https://img/apple.png"
+                                    }
+                                  ],
+                                  "atestacao": {
+                                    "plataforma": "IOS",
+                                    "provedor": "APPLE_APP_ATTEST",
+                                    "tipoComprovante": "OBJETO_ASSERCAO",
+                                    "identificadorDesafio": "desafio",
+                                    "desafioBase64": "ZGVzYWZpbw==",
+                                    "conteudoComprovante": "Y29tcHJvdmFudGU=",
+                                    "geradoEm": "2026-03-26T20:00:00Z",
+                                    "chaveId": "chave"
+                                  },
+                                  "segurancaAplicativo": {
+                                    "plataforma": "IOS",
+                                    "provedorAtestacao": "APPLE_APP_ATTEST",
+                                    "rootOuJailbreak": false,
+                                    "debuggerDetectado": false,
+                                    "hookingSuspeito": false,
+                                    "tamperSuspeito": false,
+                                    "riscoCapturaTela": false,
+                                    "assinaturaValida": true,
+                                    "identidadeAplicativoValida": true,
+                                    "sinaisRisco": [],
+                                    "scoreRiscoLocal": 0,
+                                    "bundleIdentifier": "com.eickrono.thimisu",
+                                    "teamIdentifier": "TEAM123"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isCreated());
+
+        verify(contextoSocialPendenteJdbc).registrarOuAtualizar(
+                argThat(projeto -> projeto != null && projeto.clienteEcossistemaId() == 7L),
+                eq("google"),
+                eq("google-user-123"),
+                eq("ana@eickrono.com"),
+                eq("ana.google"),
+                eq("Ana Google"),
+                eq("https://img/google.png"),
+                isNull(),
+                isNull()
+        );
+        verify(contextoSocialPendenteJdbc).registrarOuAtualizar(
+                argThat(projeto -> projeto != null && projeto.clienteEcossistemaId() == 7L),
+                eq("apple"),
+                eq("apple-user-123"),
+                eq("ana@eickrono.com"),
+                eq("ana.apple"),
+                eq("Ana Apple"),
+                eq("https://img/apple.png"),
+                isNull(),
+                isNull()
         );
     }
 

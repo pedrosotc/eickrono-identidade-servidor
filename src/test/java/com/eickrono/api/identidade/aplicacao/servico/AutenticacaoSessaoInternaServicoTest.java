@@ -42,7 +42,7 @@ class AutenticacaoSessaoInternaServicoTest {
         properties.setRealm("eickrono");
         properties.setClientId("app-flutter-local");
         properties.setClientSecret("");
-        properties.setTokenExchangeClientId("autenticacao-servidor");
+        properties.setTokenExchangeClientId("eickrono-autenticacao-interno");
         properties.setTokenExchangeClientSecret("segredo-token-exchange");
         properties.setTokenExchangeAudience("app-flutter-local");
         properties.setTokenExchangeScope("openid offline_access");
@@ -184,7 +184,7 @@ class AutenticacaoSessaoInternaServicoTest {
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_FORM_URLENCODED))
                 .andExpect(content().string(org.hamcrest.Matchers.containsString(
                         "grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Atoken-exchange")))
-                .andExpect(content().string(org.hamcrest.Matchers.containsString("client_id=autenticacao-servidor")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("client_id=eickrono-autenticacao-interno")))
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("client_secret=segredo-token-exchange")))
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("audience=app-flutter-local")))
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("scope=openid+offline_access")))
@@ -211,19 +211,19 @@ class AutenticacaoSessaoInternaServicoTest {
     }
 
     @Test
-    @DisplayName("deve trocar token Apple JWT sem subject_issuer explicito")
+    @DisplayName("deve trocar id token Apple com subject_issuer apple")
     void deveAutenticarSessaoInternaComApple() {
         mockServer.expect(requestTo(URL_TOKEN))
                 .andExpect(method(POST))
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_FORM_URLENCODED))
                 .andExpect(content().string(org.hamcrest.Matchers.containsString(
                         "grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Atoken-exchange")))
-                .andExpect(content().string(org.hamcrest.Matchers.containsString("client_id=autenticacao-servidor")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("client_id=eickrono-autenticacao-interno")))
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("requested_token_type=urn%3Aietf%3Aparams%3Aoauth%3Atoken-type%3Arefresh_token")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("subject_issuer=apple")))
                 .andExpect(content().string(org.hamcrest.Matchers.containsString(
-                        "subject_token_type=urn%3Aietf%3Aparams%3Aoauth%3Atoken-type%3Ajwt")))
+                        "subject_token_type=urn%3Aietf%3Aparams%3Aoauth%3Atoken-type%3Aid_token")))
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("subject_token=apple-id-token")))
-                .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("subject_issuer="))))
                 .andRespond(withSuccess("""
                         {
                           "access_token": "access-apple-123",

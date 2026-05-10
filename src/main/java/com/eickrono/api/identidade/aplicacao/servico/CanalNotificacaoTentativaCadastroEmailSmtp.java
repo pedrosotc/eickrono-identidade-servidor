@@ -6,7 +6,6 @@ import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.mail.MailException;
-import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 
 public class CanalNotificacaoTentativaCadastroEmailSmtp implements CanalNotificacaoTentativaCadastroEmail {
@@ -30,26 +29,21 @@ public class CanalNotificacaoTentativaCadastroEmailSmtp implements CanalNotifica
             throw new IllegalArgumentException("emailPrincipal e obrigatorio");
         }
 
-        SimpleMailMessage mensagem = new SimpleMailMessage();
-        mensagem.setTo(email);
-        mensagem.setFrom(cadastroEmailProperties.getRemetente());
-        if (cadastroEmailProperties.getResponderPara() != null
-                && !cadastroEmailProperties.getResponderPara().isBlank()) {
-            mensagem.setReplyTo(cadastroEmailProperties.getResponderPara());
-        }
-        mensagem.setSubject(cadastroEmailProperties.getAssuntoTentativaCadastroEmailExistente());
-        mensagem.setText(criarCorpoMensagem());
-
         try {
-            javaMailSender.send(mensagem);
-            LOGGER.info("Aviso de tentativa de cadastro enviado por SMTP para {}", email);
-        } catch (MailException ex) {
-            LOGGER.error(
-                    "notificacao_cadastro_email_smtp_falhou email={} motivo={}",
-                    email,
-                    ex.getMessage(),
-                    ex
+            new EnvioEmailSmtpRastreavel(javaMailSender, cadastroEmailProperties, LOGGER).enviar(
+                    new EnvioEmailSmtpRastreavel.MensagemEmailRastreavel(
+                            "notificacao_tentativa_cadastro",
+                            "notificacao_email_smtp_tentativa",
+                            "notificacao_email_smtp_enviado",
+                            "notificacao_email_smtp_falhou",
+                            email,
+                            cadastroEmailProperties.getAssuntoTentativaCadastroEmailExistente(),
+                            criarCorpoMensagem(),
+                            null,
+                            null
+                    )
             );
+        } catch (MailException ex) {
             throw new EntregaEmailException(
                     "notificacao_email_indisponivel",
                     "Não foi possível enviar o aviso por e-mail agora.",

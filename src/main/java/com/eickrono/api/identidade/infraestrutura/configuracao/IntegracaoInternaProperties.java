@@ -15,7 +15,8 @@ public class IntegracaoInternaProperties {
             List.of(
                     "thimisu-backend",
                     "identidade-servidor",
-                    "servidor-autorizacao"));
+                    "eickrono-keycloak",
+                    "eickrono-autenticacao-interno"));
 
     public String getSegredo() {
         return segredo;

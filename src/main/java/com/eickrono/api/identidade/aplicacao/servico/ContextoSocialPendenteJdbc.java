@@ -5,6 +5,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Clock;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
@@ -267,6 +268,54 @@ public class ContextoSocialPendenteJdbc {
         return atualizados > 0;
     }
 
+    public List<ContextoSocialPendenteCadastro> listarPendentesAberturaCadastro(final Long clienteEcossistemaId,
+                                                                                final String emailAutenticado) {
+        if (clienteEcossistemaId == null || !StringUtils.hasText(emailAutenticado)) {
+            return List.of();
+        }
+        return jdbcTemplate.query("""
+                SELECT id,
+                       provedor,
+                       identificador_externo,
+                       nome_usuario_externo,
+                       nome_exibicao_externo,
+                       url_avatar_externo
+                  FROM autenticacao.contextos_sociais_pendentes
+                 WHERE cliente_ecossistema_id = :clienteEcossistemaId
+                   AND modo_pendente = :modoPendente
+                   AND email_social_normalizado = :email
+                   AND cancelado_em IS NULL
+                   AND consumido_em IS NULL
+                   AND expira_em > now()
+                 ORDER BY atualizado_em ASC, criado_em ASC
+                """,
+                new MapSqlParameterSource()
+                        .addValue("clienteEcossistemaId", clienteEcossistemaId)
+                        .addValue("modoPendente", MODO_ABRIR_CADASTRO)
+                        .addValue("email", emailAutenticado.trim().toLowerCase(Locale.ROOT)),
+                this::mapearContextoCadastro);
+    }
+
+    public boolean consumir(final UUID contextoId) {
+        if (contextoId == null) {
+            return false;
+        }
+        OffsetDateTime agora = OffsetDateTime.now(clock);
+        int atualizados = jdbcTemplate.update("""
+                UPDATE autenticacao.contextos_sociais_pendentes
+                   SET consumido_em = COALESCE(consumido_em, :consumidoEm),
+                       atualizado_em = :atualizadoEm
+                 WHERE id = :id
+                   AND cancelado_em IS NULL
+                   AND consumido_em IS NULL
+                """,
+                new MapSqlParameterSource()
+                        .addValue("id", contextoId)
+                        .addValue("consumidoEm", agora)
+                        .addValue("atualizadoEm", agora));
+        return atualizados > 0;
+    }
+
     private Optional<UUID> buscarContextoAtivo(final Long clienteEcossistemaId,
                                                final String provedor,
                                                final String identificadorExterno) {
@@ -380,6 +429,18 @@ public class ContextoSocialPendenteJdbc {
         );
     }
 
+    private ContextoSocialPendenteCadastro mapearContextoCadastro(final ResultSet rs, final int rowNum)
+            throws SQLException {
+        return new ContextoSocialPendenteCadastro(
+                rs.getObject("id", UUID.class),
+                rs.getString("provedor"),
+                rs.getString("identificador_externo"),
+                rs.getString("nome_usuario_externo"),
+                rs.getString("nome_exibicao_externo"),
+                rs.getString("url_avatar_externo")
+        );
+    }
+
     private String normalizarObrigatorio(final String valor, final String campo) {
         Objects.requireNonNull(valor, campo + " é obrigatório");
         String texto = valor.trim();
@@ -428,6 +489,16 @@ public class ContextoSocialPendenteJdbc {
             int tentativasFalhas,
             int tentativasRestantes,
             boolean cancelado
+    ) {
+    }
+
+    public record ContextoSocialPendenteCadastro(
+            UUID id,
+            String provedor,
+            String identificadorExterno,
+            String nomeUsuarioExterno,
+            String nomeExibicaoExterno,
+            String urlAvatarExterno
     ) {
     }
 }

@@ -9,7 +9,11 @@ import org.springframework.http.HttpStatus;
 public record VinculoSocialPendenteApiRequest(
         @NotBlank String provedor,
         @NotBlank String identificadorExterno,
-        String nomeUsuarioExterno
+        String contextoSocialPendenteId,
+        String nomeUsuarioExterno,
+        String email,
+        String nomeCompleto,
+        String urlAvatarExterno
 ) {
 
     public VinculoSocialPendenteCadastro paraModelo() {

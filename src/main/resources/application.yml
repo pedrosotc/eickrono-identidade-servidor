@@ -178,8 +178,8 @@ integracao:
     clientes-permitidos:
       - ${INTEGRACAO_INTERNA_CLIENTE_THIMISU:thimisu-backend}
       - identidade-servidor
-      - ${INTEGRACAO_INTERNA_CLIENTE_AUTORIZACAO:servidor-autorizacao}
-      - ${INTEGRACAO_INTERNA_CLIENTE_AUTORIZACAO_INTERNO:servidor-autorizacao-interno}
+      - ${INTEGRACAO_INTERNA_CLIENTE_AUTORIZACAO:eickrono-keycloak}
+      - ${INTEGRACAO_INTERNA_CLIENTE_AUTENTICACAO:eickrono-autenticacao-interno}
   perfil:
     url-base: ${INTEGRACAO_PERFIL_URL_BASE:http://localhost:8082}
     disponibilidade-url-base: ${INTEGRACAO_PERFIL_DISPONIBILIDADE_URL_BASE:http://localhost:8081}
@@ -187,6 +187,6 @@ integracao:
     jwt-interno:
       url-base: ${INTEGRACAO_PERFIL_JWT_INTERNO_URL_BASE:http://localhost:8080}
       realm: ${INTEGRACAO_PERFIL_JWT_INTERNO_REALM:eickrono}
-      client-id: ${INTEGRACAO_PERFIL_JWT_INTERNO_CLIENT_ID:autenticacao-servidor}
+      client-id: ${INTEGRACAO_PERFIL_JWT_INTERNO_CLIENT_ID:eickrono-autenticacao-interno}
       client-secret: ${INTEGRACAO_PERFIL_JWT_INTERNO_CLIENT_SECRET:CHANGE_ME}
       timeout: ${INTEGRACAO_PERFIL_JWT_INTERNO_TIMEOUT:PT5S}

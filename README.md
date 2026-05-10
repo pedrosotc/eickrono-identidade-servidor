@@ -1,6 +1,6 @@
 # Eickrono Identidade Servidor
 
-Projeto canônico e independente da borda pública de identidade e autenticação da
+Projeto canônico e independente do serviço de identidade e contexto canônico da
 Eickrono.
 
 O nome do repositório agora é `eickrono-identidade-servidor`, mas o
@@ -24,12 +24,21 @@ Regra prática:
 
 ## Papel
 
-- expor os endpoints publicos de cadastro, login, recuperacao de senha e sessao
-- validar codigos e credenciais
-- emitir e renovar sessao
-- emitir `X-Device-Token`
-- integrar com Keycloak e com os demais servicos do ecossistema por
-  backchannel
+### Alvo arquitetural aprovado
+
+- concentrar a leitura e a escrita da `Pessoa` canônica;
+- expor contexto de identidade compartilhado para os demais serviços internos;
+- responder por vínculos, dados e contexto canônico que a autenticação ainda
+  precise consultar por backchannel;
+- deixar de ser a borda pública final do app para cadastro, login, refresh e
+  recuperação de senha.
+
+### Estado atual do runtime
+
+- este serviço ainda carrega contratos públicos transitórios usados pelo app em
+  parte do runtime atual;
+- essa exposição pública atual deve ser lida como estado de migração, não como
+  fronteira final aprovada.
 
 ## Build e teste
 
@@ -72,5 +81,11 @@ O `Dockerfile` deste projeto espera que o `jar` ja tenha sido empacotado em
 
 ## Relação com os demais serviços
 
-- `eickrono-autenticacao-servidor`: servidor de autenticação/autorização baseado em Keycloak
-- `eickrono-contas-servidor`: API de contas
+- `eickrono-autenticacao-servidor`: servidor central de autenticação/autorização
+  baseado em Keycloak e futura borda pública final do app
+- `eickrono-contas-servidor`: domínio separado de contas, fora da fronteira
+  interna da autenticação
+
+## Documentação operacional
+
+- [Checklist Técnico: Vínculos Sociais Plurais no Cadastro](/Users/thiago/Desenvolvedor/flutter/eickrono-identidade-servidor/checklist_tecnico_vinculos_sociais_plural_cadastro.md)

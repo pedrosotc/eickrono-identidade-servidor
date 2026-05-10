@@ -33,7 +33,7 @@ seguranca:
 documentacao:
   swagger:
     usuario: swagger
-    senha: swagger-hml
+    senha: Sw9@Qm2!Tx7#Lp4$Vz8Kr
     ips-permitidos:
       - 10.0.0.10
       - 10.0.0.11
@@ -48,6 +48,10 @@ logging:
   level:
     com.eickrono.api.identidade: INFO
 
+integracao:
+  perfil:
+    disponibilidade-url-base: ${INTEGRACAO_PERFIL_DISPONIBILIDADE_URL_BASE:https://id-hml-interno.hml.eickrono.internal:8443}
+
 identidade:
   seguranca:
     app:
@@ -60,6 +64,7 @@ identidade:
       apple:
         habilitado: ${IDENTIDADE_ATESTACAO_APP_APPLE_HABILITADO:false}
   cadastro:
+    tolerar-falha-disponibilidade-central: true
     interna:
       keycloak:
         url-base: ${IDENTIDADE_CADASTRO_INTERNO_KEYCLOAK_URL_BASE:http://localhost:18080}
