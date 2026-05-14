@@ -40,4 +40,12 @@ public record CadastroApiRequest(
         @Valid @NotNull AtestacaoOperacaoApiRequest atestacao,
         @Valid @NotNull SegurancaAplicativoApiRequest segurancaAplicativo
 ) {
+    public CadastroApiRequest {
+        vinculosSociaisPendentes = vinculosSociaisPendentes == null ? null : List.copyOf(vinculosSociaisPendentes);
+    }
+
+    @Override
+    public List<VinculoSocialPendenteApiRequest> vinculosSociaisPendentes() {
+        return vinculosSociaisPendentes == null ? null : List.copyOf(vinculosSociaisPendentes);
+    }
 }

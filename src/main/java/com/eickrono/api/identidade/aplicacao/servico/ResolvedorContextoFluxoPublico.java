@@ -9,6 +9,7 @@ import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import org.springframework.stereotype.Component;
 
@@ -85,7 +86,7 @@ public class ResolvedorContextoFluxoPublico {
         if (emailPrincipal == null) {
             return null;
         }
-        String valor = emailPrincipal.trim().toLowerCase();
+        String valor = emailPrincipal.trim().toLowerCase(Locale.ROOT);
         return valor.isEmpty() ? null : valor;
     }
 

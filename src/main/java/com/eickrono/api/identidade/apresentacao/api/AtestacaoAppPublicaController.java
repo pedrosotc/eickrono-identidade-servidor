@@ -1,5 +1,6 @@
 package com.eickrono.api.identidade.apresentacao.api;
 
+import com.eickrono.api.identidade.aplicacao.excecao.AtestacaoAppInvalidaException;
 import com.eickrono.api.identidade.aplicacao.modelo.DesafioAtestacaoGerado;
 import com.eickrono.api.identidade.aplicacao.modelo.ValidacaoAtestacaoAppConcluida;
 import com.eickrono.api.identidade.aplicacao.servico.AtestacaoAppServico;
@@ -77,7 +78,7 @@ public class AtestacaoAppPublicaController {
                     erro.getReason()
             );
             throw erro;
-        } catch (RuntimeException erro) {
+        } catch (AtestacaoAppInvalidaException erro) {
             LOGGER.error(
                     "atestacao_publica_desafio_falhou aplicacaoId={} operacao={} plataforma={} cadastroId={} usuarioSub={} pessoaIdPerfil={} registroDispositivoId={}",
                     request.aplicacaoId(),

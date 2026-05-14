@@ -273,9 +273,9 @@ public class ProvisionamentoIdentidadeService {
     }
 
     private boolean resolverEmailVerificado(final Jwt jwt) {
-        Boolean emailVerificado = extrairBooleano(jwt, "email_verified");
-        if (emailVerificado != null) {
-            return emailVerificado;
+        Optional<Boolean> emailVerificado = extrairBooleano(jwt, "email_verified");
+        if (emailVerificado.isPresent()) {
+            return emailVerificado.get();
         }
         return extrairProvedorSocial(jwt)
                 .map(ProvedorVinculoSocial::confiaEmailDoProvedor)
@@ -301,14 +301,14 @@ public class ProvisionamentoIdentidadeService {
         return Optional.empty();
     }
 
-    private Boolean extrairBooleano(final Jwt jwt, final String claim) {
+    private Optional<Boolean> extrairBooleano(final Jwt jwt, final String claim) {
         Object valor = jwt.getClaims().get(claim);
         if (valor instanceof Boolean booleano) {
-            return booleano;
+            return Optional.of(booleano);
         }
         if (valor instanceof String texto && !texto.isBlank()) {
-            return Boolean.parseBoolean(texto);
+            return Optional.of(Boolean.parseBoolean(texto));
         }
-        return null;
+        return Optional.empty();
     }
 }

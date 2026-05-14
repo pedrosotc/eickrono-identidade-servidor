@@ -18,12 +18,12 @@ public class EstadoApiController {
     private static final String VALOR_DESCONHECIDO = "desconhecida";
 
     private final String nomeAplicacao;
-    private final BuildProperties buildProperties;
+    private final ObjectProvider<BuildProperties> buildPropertiesProvider;
 
     public EstadoApiController(@Value("${spring.application.name}") final String nomeAplicacao,
                                final ObjectProvider<BuildProperties> buildPropertiesProvider) {
         this.nomeAplicacao = nomeAplicacao;
-        this.buildProperties = buildPropertiesProvider.getIfAvailable();
+        this.buildPropertiesProvider = buildPropertiesProvider;
     }
 
     @GetMapping("/estado")
@@ -37,6 +37,7 @@ public class EstadoApiController {
     }
 
     private String resolverVersao() {
+        BuildProperties buildProperties = buildPropertiesProvider.getIfAvailable();
         if (buildProperties != null && StringUtils.hasText(buildProperties.getVersion())) {
             return buildProperties.getVersion();
         }
@@ -44,6 +45,7 @@ public class EstadoApiController {
     }
 
     private String resolverBuildTime() {
+        BuildProperties buildProperties = buildPropertiesProvider.getIfAvailable();
         if (buildProperties == null) {
             return VALOR_DESCONHECIDO;
         }

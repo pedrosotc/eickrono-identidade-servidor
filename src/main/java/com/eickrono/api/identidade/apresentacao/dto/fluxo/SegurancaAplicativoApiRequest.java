@@ -20,4 +20,12 @@ public record SegurancaAplicativoApiRequest(
         String teamIdentifier,
         String assinaturaSha256
 ) {
+    public SegurancaAplicativoApiRequest {
+        sinaisRisco = sinaisRisco == null ? null : List.copyOf(sinaisRisco);
+    }
+
+    @Override
+    public List<String> sinaisRisco() {
+        return sinaisRisco == null ? null : List.copyOf(sinaisRisco);
+    }
 }

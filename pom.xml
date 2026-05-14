@@ -26,6 +26,7 @@
         <spring-doc.version>2.5.0</spring-doc.version>
         <checkstyle.version>10.14.2</checkstyle.version>
         <spotbugs.version>4.9.0.0</spotbugs.version>
+        <jackson-annotations.version>2.21</jackson-annotations.version>
         <otel.version>1.36.0</otel.version>
         <testcontainers.version>1.21.3</testcontainers.version>
     </properties>
@@ -45,6 +46,11 @@
                 <version>${testcontainers.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-annotations</artifactId>
+                <version>${jackson-annotations.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
@@ -117,7 +123,6 @@
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-annotations</artifactId>
-            <version>2.21</version>
         </dependency>
         <dependency>
             <groupId>io.opentelemetry</groupId>

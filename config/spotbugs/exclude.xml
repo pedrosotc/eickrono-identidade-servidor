@@ -4,4 +4,22 @@
         <Class name="com.eickrono.api.identidade.infraestrutura.configuracao.DispositivoProperties"/>
         <Bug pattern="EI_EXPOSE_REP"/>
     </Match>
+    <!-- Colaboradores Spring injetados por construtor nao representam exposicao de estado mutavel da classe. -->
+    <Match>
+        <Field name="sincronizacaoModeloMultiappService"/>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+    </Match>
+    <Match>
+        <Field name="clienteAdministracaoCadastroKeycloak"/>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+    </Match>
+    <Match>
+        <Field name="clienteAdministracaoVinculosSociaisKeycloak"/>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+    </Match>
+    <!-- Entidade JPA valida invariantes no construtor publico de dominio. -->
+    <Match>
+        <Class name="com.eickrono.api.identidade.dominio.modelo.ConviteOrganizacional"/>
+        <Bug pattern="CT_CONSTRUCTOR_THROW"/>
+    </Match>
 </FindBugsFilter>

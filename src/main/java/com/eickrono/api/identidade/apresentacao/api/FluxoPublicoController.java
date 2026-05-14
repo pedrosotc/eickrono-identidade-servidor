@@ -1,5 +1,6 @@
 package com.eickrono.api.identidade.apresentacao.api;
 
+import com.eickrono.api.identidade.aplicacao.excecao.AtestacaoAppInvalidaException;
 import com.eickrono.api.identidade.aplicacao.excecao.FluxoPublicoException;
 import com.eickrono.api.identidade.aplicacao.modelo.CadastroInternoRealizado;
 import com.eickrono.api.identidade.aplicacao.modelo.ConfirmacaoCodigoRecuperacaoSenhaRealizada;
@@ -252,16 +253,6 @@ public class FluxoPublicoController {
                     emailMascarado
             );
             throw exception;
-        } catch (RuntimeException exception) {
-            LOGGER.error(
-                    "cadastro_publico_falhou usuario={} email={} telefone={} aplicacaoId={}",
-                    usuarioMascarado,
-                    emailMascarado,
-                    telefoneMascarado,
-                    requisicao.aplicacaoId(),
-                    exception
-            );
-            throw exception;
         }
     }
 
@@ -492,7 +483,7 @@ public class FluxoPublicoController {
                     requisicao.atestacao().provedor(),
                     requisicao.atestacao().tipoComprovante()
             );
-        } catch (RuntimeException exception) {
+        } catch (AtestacaoAppInvalidaException exception) {
             LOGGER.warn(
                     "login_publico_atestacao_rejeitada login={} provedor={} tipoComprovante={} motivo={}",
                     loginMascarado,
@@ -519,7 +510,7 @@ public class FluxoPublicoController {
                     requisicao.segurancaAplicativo().identidadeAplicativoValida(),
                     requisicao.segurancaAplicativo().sinaisRisco() == null ? 0 : requisicao.segurancaAplicativo().sinaisRisco().size()
             );
-        } catch (RuntimeException exception) {
+        } catch (FluxoPublicoException exception) {
             LOGGER.warn(
                     "login_publico_seguranca_rejeitada login={} provedorAtestacao={} scoreRiscoLocal={} motivo={}",
                     loginMascarado,
@@ -643,7 +634,7 @@ public class FluxoPublicoController {
                     provedorNormalizado,
                     requisicao.atestacao().tipoComprovante()
             );
-        } catch (RuntimeException exception) {
+        } catch (AtestacaoAppInvalidaException exception) {
             LOGGER.warn(
                     "login_social_publico_atestacao_rejeitada provedor={} tipoComprovante={} motivo={}",
                     provedorNormalizado,
@@ -670,7 +661,7 @@ public class FluxoPublicoController {
                     requisicao.segurancaAplicativo().identidadeAplicativoValida(),
                     requisicao.segurancaAplicativo().sinaisRisco() == null ? 0 : requisicao.segurancaAplicativo().sinaisRisco().size()
             );
-        } catch (RuntimeException exception) {
+        } catch (FluxoPublicoException exception) {
             LOGGER.warn(
                     "login_social_publico_seguranca_rejeitada provedor={} provedorAtestacao={} scoreRiscoLocal={} motivo={}",
                     provedorNormalizado,

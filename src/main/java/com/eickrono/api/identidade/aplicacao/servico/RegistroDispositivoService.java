@@ -200,7 +200,7 @@ public class RegistroDispositivoService {
             validarCodigo(codigoEmail, request.getCodigoEmail(), agora);
             registro.codigoPorCanal(CanalVerificacao.SMS)
                     .ifPresent(codigoSms -> validarCodigo(codigoSms, request.getCodigoSms(), agora));
-        } catch (RuntimeException ex) {
+        } catch (ResponseStatusException ex) {
             sincronizarRegistroSeConfigurado(registro);
             throw ex;
         }

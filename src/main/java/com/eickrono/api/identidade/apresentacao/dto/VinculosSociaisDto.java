@@ -10,4 +10,12 @@ public record VinculosSociaisDto(
         String avatarPreferidoOrigem,
         String avatarPreferidoUrl
 ) {
+    public VinculosSociaisDto {
+        provedores = provedores == null ? List.of() : List.copyOf(provedores);
+    }
+
+    @Override
+    public List<VinculoSocialDto> provedores() {
+        return List.copyOf(provedores);
+    }
 }

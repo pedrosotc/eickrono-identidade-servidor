@@ -40,7 +40,7 @@ public class SegurancaAplicativoProperties {
     }
 
     public List<String> getAplicacoesPermitidas() {
-        return aplicacoesPermitidas;
+        return List.copyOf(aplicacoesPermitidas);
     }
 
     public void setAplicacoesPermitidas(final List<String> aplicacoesPermitidas) {
