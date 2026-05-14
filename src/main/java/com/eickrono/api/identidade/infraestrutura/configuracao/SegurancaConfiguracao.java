@@ -47,7 +47,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 @Configuration
 @EnableConfigurationProperties({FapiProperties.class, CorsProperties.class, TlsMutuoProperties.class, SwaggerSegurancaProperties.class,
         IntegracaoInternaProperties.class, AtestacaoAppProperties.class, SessaoInternaKeycloakProperties.class,
-        CadastroInternoKeycloakProperties.class})
+        CadastroInternoKeycloakProperties.class, SocialNativoProperties.class})
 public class SegurancaConfiguracao {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(SegurancaConfiguracao.class);

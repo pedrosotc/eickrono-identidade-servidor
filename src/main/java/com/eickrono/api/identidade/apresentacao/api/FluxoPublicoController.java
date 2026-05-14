@@ -5,6 +5,7 @@ import com.eickrono.api.identidade.aplicacao.modelo.CadastroInternoRealizado;
 import com.eickrono.api.identidade.aplicacao.modelo.ConfirmacaoCodigoRecuperacaoSenhaRealizada;
 import com.eickrono.api.identidade.aplicacao.modelo.ConfirmacaoEmailCadastroPublicoRealizada;
 import com.eickrono.api.identidade.aplicacao.modelo.ConviteOrganizacionalValidado;
+import com.eickrono.api.identidade.aplicacao.modelo.CredencialSocialNativaValidada;
 import com.eickrono.api.identidade.aplicacao.modelo.ContextoSolicitacaoFluxoPublico;
 import com.eickrono.api.identidade.aplicacao.modelo.ContextoPessoaPerfilSistema;
 import com.eickrono.api.identidade.aplicacao.modelo.DispositivoSessaoRegistrado;
@@ -24,8 +25,9 @@ import com.eickrono.api.identidade.aplicacao.servico.LocalizadorPerfilSistemaPro
 import com.eickrono.api.identidade.aplicacao.servico.RecuperacaoSenhaService;
 import com.eickrono.api.identidade.aplicacao.servico.RegistroDispositivoLoginSilenciosoService;
 import com.eickrono.api.identidade.aplicacao.servico.ResolvedorProjetoFluxoPublicoJdbc;
+import com.eickrono.api.identidade.aplicacao.servico.ValidadorCredencialSocialNativa;
+import com.eickrono.api.identidade.aplicacao.servico.VinculoSocialService;
 import com.eickrono.api.identidade.dominio.modelo.CadastroConta;
-import com.eickrono.api.identidade.dominio.modelo.ProvedorVinculoSocial;
 import com.eickrono.api.identidade.dominio.modelo.TipoFormaAcesso;
 import com.eickrono.api.identidade.apresentacao.dto.fluxo.CadastroApiRequest;
 import com.eickrono.api.identidade.apresentacao.dto.fluxo.CadastroApiResposta;
@@ -94,6 +96,8 @@ public class FluxoPublicoController {
     private final ResolvedorProjetoFluxoPublicoJdbc resolvedorProjetoFluxoPublico;
     private final LocalizadorPerfilSistemaProjetoPorEmailJdbc localizadorPerfilSistemaProjetoPorEmail;
     private final FormaAcessoRepositorio formaAcessoRepositorio;
+    private final VinculoSocialService vinculoSocialService;
+    private final ValidadorCredencialSocialNativa validadorCredencialSocialNativa;
 
     public FluxoPublicoController(final CadastroContaInternaServico cadastroContaInternaServico,
                                   final AtestacaoAppServico atestacaoAppServico,
@@ -106,7 +110,9 @@ public class FluxoPublicoController {
                                   final RegistroDispositivoLoginSilenciosoService registroDispositivoLoginSilenciosoService,
                                   final ResolvedorProjetoFluxoPublicoJdbc resolvedorProjetoFluxoPublico,
                                   final LocalizadorPerfilSistemaProjetoPorEmailJdbc localizadorPerfilSistemaProjetoPorEmail,
-                                  final FormaAcessoRepositorio formaAcessoRepositorio) {
+                                  final FormaAcessoRepositorio formaAcessoRepositorio,
+                                  final VinculoSocialService vinculoSocialService,
+                                  final ValidadorCredencialSocialNativa validadorCredencialSocialNativa) {
         this.cadastroContaInternaServico = Objects.requireNonNull(
                 cadastroContaInternaServico, "cadastroContaInternaServico é obrigatório");
         this.atestacaoAppServico = Objects.requireNonNull(atestacaoAppServico, "atestacaoAppServico é obrigatório");
@@ -133,6 +139,14 @@ public class FluxoPublicoController {
         this.formaAcessoRepositorio = Objects.requireNonNull(
                 formaAcessoRepositorio,
                 "formaAcessoRepositorio é obrigatório"
+        );
+        this.vinculoSocialService = Objects.requireNonNull(
+                vinculoSocialService,
+                "vinculoSocialService é obrigatório"
+        );
+        this.validadorCredencialSocialNativa = Objects.requireNonNull(
+                validadorCredencialSocialNativa,
+                "validadorCredencialSocialNativa é obrigatório"
         );
     }
 
@@ -570,6 +584,14 @@ public class FluxoPublicoController {
                     "A conta ainda não está liberada para utilizar o aplicativo."
             );
         }
+        if (contextoSocialPendente.filter(ContextoSocialPendenteJdbc.ContextoSocialPendenteAtivo::modoEntrarEVincular)
+                .isPresent()) {
+            vinculoSocialService.vincularContextoPendenteAposLoginLocal(
+                    sessao.accessToken(),
+                    contextoSocialPendente.orElseThrow(),
+                    requisicao.aplicacaoId()
+            );
+        }
         DispositivoSessaoRegistrado dispositivoRegistrado = registroDispositivoLoginSilenciosoService.registrar(
                 contexto,
                 requisicao.dispositivo()
@@ -659,6 +681,14 @@ public class FluxoPublicoController {
             throw exception;
         }
 
+        CredencialSocialNativaValidada credencialSocial = validarCredencialSocialNativa(
+                provedorNormalizado,
+                requisicao
+        );
+        if (!identidadeSocialVinculadaLocalmente(credencialSocial)) {
+            throw resolverSocialSemContaLocal(requisicao, credencialSocial);
+        }
+
         SessaoInternaAutenticada sessao;
         try {
             sessao = autenticacaoSessaoInternaServico.autenticarSocial(
@@ -667,20 +697,13 @@ public class FluxoPublicoController {
             );
         } catch (ResponseStatusException exception) {
             if (exception.getStatusCode() == HttpStatus.UNAUTHORIZED) {
-                if (ehConflitoVinculoSocialSocial(exception)) {
-                    throw resolverConflitoAutenticacaoSocial(requisicao, provedorNormalizado);
-                }
                 LOGGER.warn(
                         "login_social_publico_rejeitado provedor={} status={} motivo={}",
                         provedorNormalizado,
                         exception.getStatusCode().value(),
                         exception.getReason()
                 );
-                throw new FluxoPublicoException(
-                        HttpStatus.UNAUTHORIZED,
-                        "autenticacao_social_invalida",
-                        "Não foi possível concluir a autenticação com a rede social informada."
-                );
+                throw erroAutenticacaoSocialInvalida();
             }
             throw exception;
         }
@@ -706,40 +729,63 @@ public class FluxoPublicoController {
         );
     }
 
-    private boolean ehConflitoVinculoSocialSocial(final ResponseStatusException exception) {
-        String motivo = Objects.requireNonNullElse(exception.getReason(), "")
-                .trim()
-                .toLowerCase(Locale.ROOT);
-        return motivo.contains("user already exists")
-                || motivo.contains("federated_identity_account_exists");
+    private CredencialSocialNativaValidada validarCredencialSocialNativa(
+            final String provedorNormalizado,
+            final CriarSessaoSocialApiRequest requisicao) {
+        try {
+            CredencialSocialNativaValidada credencial =
+                    validadorCredencialSocialNativa.validar(provedorNormalizado, requisicao.tokenExterno());
+            return new CredencialSocialNativaValidada(
+                    credencial.provedor(),
+                    credencial.identificadorExterno(),
+                    credencial.email(),
+                    normalizarTexto(credencial.nomeUsuarioExterno(), requisicao.nomeUsuarioExterno()),
+                    normalizarTexto(credencial.nomeExibicaoExterno(), requisicao.nomeCompleto()),
+                    normalizarTexto(credencial.urlAvatarExterno(), requisicao.urlAvatarExterno())
+            );
+        } catch (ResponseStatusException exception) {
+            if (exception.getStatusCode() == HttpStatus.UNAUTHORIZED) {
+                LOGGER.warn(
+                        "login_social_publico_rejeitado provedor={} status={} motivo={}",
+                        provedorNormalizado,
+                        exception.getStatusCode().value(),
+                        exception.getReason()
+                );
+                throw erroAutenticacaoSocialInvalida();
+            }
+            throw exception;
+        }
     }
 
-    private FluxoPublicoException resolverConflitoAutenticacaoSocial(
+    private FluxoPublicoException erroAutenticacaoSocialInvalida() {
+        return new FluxoPublicoException(
+                HttpStatus.UNAUTHORIZED,
+                "autenticacao_social_invalida",
+                "Não foi possível concluir a autenticação com a rede social informada."
+        );
+    }
+
+    private boolean identidadeSocialVinculadaLocalmente(final CredencialSocialNativaValidada credencialSocial) {
+        return formaAcessoRepositorio.findByTipoAndProvedorAndIdentificador(
+                TipoFormaAcesso.SOCIAL,
+                credencialSocial.provedor().getAliasFormaAcesso(),
+                credencialSocial.identificadorExterno()
+        ).isPresent();
+    }
+
+    private FluxoPublicoException resolverSocialSemContaLocal(
             final CriarSessaoSocialApiRequest requisicao,
-            final String provedorNormalizado) {
-        String identificadorExterno = normalizarTexto(requisicao.identificadorExterno());
-        String emailSocial = normalizarEmail(requisicao.email());
-        if (StringUtils.hasText(identificadorExterno)
-                && identidadeSocialJaVinculadaNoSistema(provedorNormalizado, identificadorExterno)) {
-            return new FluxoPublicoException(
-                    HttpStatus.CONFLICT,
-                    "vinculo_social_pertence_a_outra_conta",
-                    "Esta rede social já está vinculada a outra conta e não pode ser vinculada novamente.",
-                    montarDetalhesConflitoVinculoSocial(
-                            provedorNormalizado,
-                            identificadorExterno,
-                            emailSocial,
-                            "SUPORTE"
-                    )
-            );
-        }
+            final CredencialSocialNativaValidada credencialSocial) {
+        String emailSocial = normalizarEmail(credencialSocial.email());
+        String provedor = credencialSocial.provedor().getAliasApi();
+        String identificadorExterno = credencialSocial.identificadorExterno();
         if (!StringUtils.hasText(emailSocial)) {
             return new FluxoPublicoException(
                     HttpStatus.CONFLICT,
                     "conflito_vinculo_social_ambiguo",
                     "Não foi possível determinar automaticamente se esta rede social deve abrir cadastro ou ser vinculada. Tente novamente ou procure suporte.",
                     montarDetalhesConflitoVinculoSocial(
-                            provedorNormalizado,
+                            provedor,
                             identificadorExterno,
                             null,
                             "SUPORTE"
@@ -754,29 +800,29 @@ public class FluxoPublicoController {
                         emailSocial
                 );
         Map<String, Object> detalhes = new java.util.LinkedHashMap<>();
-        detalhes.put("provedor", provedorNormalizado);
+        detalhes.put("provedor", provedor);
         if (StringUtils.hasText(identificadorExterno)) {
             detalhes.put("identificadorExterno", identificadorExterno);
         }
         detalhes.put("email", emailSocial);
-        if (StringUtils.hasText(requisicao.nomeUsuarioExterno())) {
-            detalhes.put("nomeUsuarioExterno", requisicao.nomeUsuarioExterno().trim());
+        if (StringUtils.hasText(credencialSocial.nomeUsuarioExterno())) {
+            detalhes.put("nomeUsuarioExterno", credencialSocial.nomeUsuarioExterno().trim());
         }
-        if (StringUtils.hasText(requisicao.nomeCompleto())) {
-            detalhes.put("nomeExibicaoExterno", requisicao.nomeCompleto().trim());
+        if (StringUtils.hasText(credencialSocial.nomeExibicaoExterno())) {
+            detalhes.put("nomeExibicaoExterno", credencialSocial.nomeExibicaoExterno().trim());
         }
-        if (StringUtils.hasText(requisicao.urlAvatarExterno())) {
-            detalhes.put("urlAvatarExterno", requisicao.urlAvatarExterno().trim());
+        if (StringUtils.hasText(credencialSocial.urlAvatarExterno())) {
+            detalhes.put("urlAvatarExterno", credencialSocial.urlAvatarExterno().trim());
         }
         if (StringUtils.hasText(identificadorExterno)) {
             UUID contextoSocialPendenteId = contextoSocialPendenteJdbc.registrarOuAtualizar(
                     projeto,
-                    provedorNormalizado,
+                    provedor,
                     identificadorExterno,
                     emailSocial,
-                    requisicao.nomeUsuarioExterno(),
-                    requisicao.nomeCompleto(),
-                    requisicao.urlAvatarExterno(),
+                    credencialSocial.nomeUsuarioExterno(),
+                    credencialSocial.nomeExibicaoExterno(),
+                    credencialSocial.urlAvatarExterno(),
                     contaExistente.map(PerfilSistemaProjetoPorEmailResolvido::perfilSistemaId).orElse(null),
                     contaExistente.map(PerfilSistemaProjetoPorEmailResolvido::identificadorPublicoSistemaSugerido)
                             .orElse(null)
@@ -803,18 +849,6 @@ public class FluxoPublicoController {
         );
     }
 
-    private boolean identidadeSocialJaVinculadaNoSistema(final String provedorNormalizado,
-                                                         final String identificadorExterno) {
-        String aliasFormaAcesso = ProvedorVinculoSocial.fromAlias(provedorNormalizado)
-                .map(ProvedorVinculoSocial::getAliasFormaAcesso)
-                .orElse(provedorNormalizado.trim().toUpperCase(Locale.ROOT));
-        return formaAcessoRepositorio.findByTipoAndProvedorAndIdentificador(
-                TipoFormaAcesso.SOCIAL,
-                aliasFormaAcesso,
-                identificadorExterno
-        ).isPresent();
-    }
-
     private Map<String, Object> montarDetalhesConflitoVinculoSocial(final String provedor,
                                                                     final String identificadorExterno,
                                                                     final String email,
@@ -835,11 +869,16 @@ public class FluxoPublicoController {
         return detalhes;
     }
 
-    private String normalizarTexto(final String valor) {
-        if (!StringUtils.hasText(valor)) {
+    private String normalizarTexto(final String... valores) {
+        if (valores == null) {
             return null;
         }
-        return valor.trim();
+        for (String valor : valores) {
+            if (StringUtils.hasText(valor)) {
+                return valor.trim();
+            }
+        }
+        return null;
     }
 
     private String normalizarEmail(final String valor) {

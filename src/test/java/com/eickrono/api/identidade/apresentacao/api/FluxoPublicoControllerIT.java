@@ -1,6 +1,7 @@
 package com.eickrono.api.identidade.apresentacao.api;
 
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -14,6 +15,7 @@ import com.eickrono.api.identidade.aplicacao.modelo.CadastroInternoRealizado;
 import com.eickrono.api.identidade.aplicacao.modelo.ConfirmacaoEmailCadastroPublicoRealizada;
 import com.eickrono.api.identidade.aplicacao.modelo.ConviteOrganizacionalValidado;
 import com.eickrono.api.identidade.aplicacao.modelo.ContextoSolicitacaoFluxoPublico;
+import com.eickrono.api.identidade.aplicacao.modelo.CredencialSocialNativaValidada;
 import com.eickrono.api.identidade.aplicacao.modelo.PerfilSistemaProjetoPorEmailResolvido;
 import com.eickrono.api.identidade.aplicacao.modelo.ProjetoFluxoPublicoResolvido;
 import com.eickrono.api.identidade.aplicacao.servico.AtestacaoAppServico;
@@ -27,6 +29,8 @@ import com.eickrono.api.identidade.aplicacao.servico.LocalizadorPerfilSistemaPro
 import com.eickrono.api.identidade.aplicacao.servico.RecuperacaoSenhaService;
 import com.eickrono.api.identidade.aplicacao.servico.RegistroDispositivoLoginSilenciosoService;
 import com.eickrono.api.identidade.aplicacao.servico.ResolvedorProjetoFluxoPublicoJdbc;
+import com.eickrono.api.identidade.aplicacao.servico.ValidadorCredencialSocialNativa;
+import com.eickrono.api.identidade.aplicacao.servico.VinculoSocialService;
 import com.eickrono.api.identidade.aplicacao.modelo.DispositivoSessaoRegistrado;
 import com.eickrono.api.identidade.aplicacao.modelo.ContextoPessoaPerfilSistema;
 import com.eickrono.api.identidade.aplicacao.modelo.RecuperacaoSenhaIniciada;
@@ -106,6 +110,12 @@ class FluxoPublicoControllerIT {
     @MockBean
     private FormaAcessoRepositorio formaAcessoRepositorio;
 
+    @MockBean
+    private VinculoSocialService vinculoSocialService;
+
+    @MockBean
+    private ValidadorCredencialSocialNativa validadorCredencialSocialNativa;
+
     @BeforeEach
     void setUp() {
         when(atestacaoAppServico.validarComprovante(org.mockito.ArgumentMatchers.any()))
@@ -149,6 +159,24 @@ class FluxoPublicoControllerIT {
                 .thenReturn(Optional.empty());
         when(formaAcessoRepositorio.findByTipoAndProvedorAndIdentificador(any(), anyString(), anyString()))
                 .thenReturn(Optional.empty());
+        when(validadorCredencialSocialNativa.validar(eq("google"), anyString()))
+                .thenReturn(new CredencialSocialNativaValidada(
+                        ProvedorVinculoSocial.GOOGLE,
+                        "google-user-123",
+                        "google@eickrono.com",
+                        "google",
+                        "Pessoa Google",
+                        "https://img/google.png"
+                ));
+        when(validadorCredencialSocialNativa.validar(eq("apple"), anyString()))
+                .thenReturn(new CredencialSocialNativaValidada(
+                        ProvedorVinculoSocial.APPLE,
+                        "apple-user-123",
+                        "estudiantemeduba@gmail.com",
+                        "estudiantemeduba",
+                        "Estudiante Meduba",
+                        null
+                ));
     }
 
     @Test
@@ -302,8 +330,8 @@ class FluxoPublicoControllerIT {
 
     @Test
     void deveMapearFalhaDeAutenticacaoSocialSemUsarCredenciaisInvalidas() throws Exception {
-        when(autenticacaoSessaoInternaServico.autenticarSocial("google", "google-access-token"))
-                .thenThrow(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Token exchange rejected"));
+        when(validadorCredencialSocialNativa.validar("google", "google-access-token"))
+                .thenThrow(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Token social rejeitado"));
 
         mockMvc.perform(post("/api/publica/sessoes/sociais")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -356,8 +384,6 @@ class FluxoPublicoControllerIT {
     @Test
     void deveClassificarConflitoSocialComoEntrarEVincularQuandoEmailJaPossuiContaNoProjeto() throws Exception {
         UUID contextoId = UUID.fromString("99999999-9999-9999-9999-999999999999");
-        when(autenticacaoSessaoInternaServico.autenticarSocial("apple", "apple-id-token"))
-                .thenThrow(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User already exists"));
         when(localizadorPerfilSistemaProjetoPorEmail.localizar(7L, "estudiantemeduba@gmail.com"))
                 .thenReturn(Optional.of(new PerfilSistemaProjetoPorEmailResolvido(
                         UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
@@ -429,17 +455,88 @@ class FluxoPublicoControllerIT {
                 .andExpect(jsonPath("$.detalhes.loginSugerido").value("pedroso_tc"))
                 .andExpect(jsonPath("$.detalhes.emailContaExistente").value("estudiantemeduba@gmail.com"))
                 .andExpect(jsonPath("$.detalhes.contextoSocialPendenteId").value(contextoId.toString()));
+        verify(autenticacaoSessaoInternaServico, never()).autenticarSocial(anyString(), anyString());
     }
 
     @Test
-    void deveClassificarConflitoSocialComoPertencenteAOutraContaQuandoIdentidadeJaEstaVinculada() throws Exception {
-        when(autenticacaoSessaoInternaServico.autenticarSocial("apple", "apple-id-token"))
-                .thenThrow(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User already exists"));
+    void deveClassificarSocialSemContaLocalComoAbrirCadastroSemCriarSessaoKeycloak() throws Exception {
+        UUID contextoId = UUID.fromString("88888888-8888-8888-8888-888888888888");
+        when(contextoSocialPendenteJdbc.registrarOuAtualizar(
+                any(ProjetoFluxoPublicoResolvido.class),
+                eq("apple"),
+                eq("apple-user-123"),
+                eq("estudiantemeduba@gmail.com"),
+                eq("estudiantemeduba"),
+                eq("Estudiante Meduba"),
+                isNull(),
+                isNull(),
+                isNull()
+        )).thenReturn(contextoId);
+
+        mockMvc.perform(post("/api/publica/sessoes/sociais")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "aplicacaoId": "eickrono-thimisu-app",
+                                  "provedor": "apple",
+                                  "tokenExterno": "apple-id-token",
+                                  "dispositivo": {
+                                    "plataforma": "IOS",
+                                    "identificadorInstalacao": "instalacao-social",
+                                    "modelo": "simulador",
+                                    "sistemaOperacional": "ios",
+                                    "versaoSistema": "18",
+                                    "versaoApp": "1.0.0"
+                                  },
+                                  "atestacao": {
+                                    "plataforma": "IOS",
+                                    "provedor": "APPLE_APP_ATTEST",
+                                    "tipoComprovante": "OBJETO_ASSERCAO",
+                                    "identificadorDesafio": "desafio",
+                                    "desafioBase64": "ZGVzYWZpbw==",
+                                    "conteudoComprovante": "Y29tcHJvdmFudGU=",
+                                    "geradoEm": "2026-03-26T20:00:00Z",
+                                    "chaveId": "chave"
+                                  },
+                                  "segurancaAplicativo": {
+                                    "plataforma": "IOS",
+                                    "provedorAtestacao": "APPLE_APP_ATTEST",
+                                    "rootOuJailbreak": false,
+                                    "debuggerDetectado": false,
+                                    "hookingSuspeito": false,
+                                    "tamperSuspeito": false,
+                                    "riscoCapturaTela": false,
+                                    "assinaturaValida": true,
+                                    "identidadeAplicativoValida": true,
+                                    "sinaisRisco": [],
+                                    "scoreRiscoLocal": 0,
+                                    "bundleIdentifier": "com.eickrono.thimisu",
+                                    "teamIdentifier": "TEAM123"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.codigo").value("social_sem_conta_local"))
+                .andExpect(jsonPath("$.detalhes.acaoSugerida").value("ABRIR_CADASTRO"))
+                .andExpect(jsonPath("$.detalhes.contextoSocialPendenteId").value(contextoId.toString()));
+        verify(autenticacaoSessaoInternaServico, never()).autenticarSocial(anyString(), anyString());
+    }
+
+    @Test
+    void deveEmitirSessaoSocialQuandoIdentidadeJaEstaVinculadaLocalmente() throws Exception {
         when(formaAcessoRepositorio.findByTipoAndProvedorAndIdentificador(
                 TipoFormaAcesso.SOCIAL,
                 "APPLE",
                 "apple-user-123"
         )).thenReturn(Optional.of(org.mockito.Mockito.mock(com.eickrono.api.identidade.dominio.modelo.FormaAcesso.class)));
+        when(autenticacaoSessaoInternaServico.autenticarSocial("apple", "apple-id-token"))
+                .thenReturn(new com.eickrono.api.identidade.aplicacao.modelo.SessaoInternaAutenticada(
+                        true,
+                        "Bearer",
+                        "access-token-social",
+                        "refresh-token-social",
+                        3600
+                ));
 
         mockMvc.perform(post("/api/publica/sessoes/sociais")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -487,9 +584,9 @@ class FluxoPublicoControllerIT {
                                   }
                                 }
                                 """))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.codigo").value("vinculo_social_pertence_a_outra_conta"))
-                .andExpect(jsonPath("$.detalhes.acaoSugerida").value("SUPORTE"));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.autenticado").value(true))
+                .andExpect(jsonPath("$.accessToken").value("access-token-social"));
     }
 
     @Test
@@ -1670,6 +1767,98 @@ class FluxoPublicoControllerIT {
                                 """))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.codigo").value("conta_incompleta"));
+    }
+
+    @Test
+    void deveConcluirVinculoSocialPendenteAoCriarSessaoComLoginLocal() throws Exception {
+        UUID contextoId = UUID.fromString("66666666-6666-6666-6666-666666666666");
+        ContextoSocialPendenteJdbc.ContextoSocialPendenteAtivo contextoPendente =
+                new ContextoSocialPendenteJdbc.ContextoSocialPendenteAtivo(
+                        contextoId,
+                        7L,
+                        "apple",
+                        "apple-user-id",
+                        "apple-user",
+                        "Pessoa Apple",
+                        null,
+                        UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+                        "a@a.com",
+                        "ENTRAR_E_VINCULAR",
+                        0,
+                        3
+                );
+        when(contextoSocialPendenteJdbc.buscarAtivo(contextoId, 7L))
+                .thenReturn(Optional.of(contextoPendente));
+        when(autenticacaoSessaoInternaServico.autenticar("a@a.com", "SenhaForte123"))
+                .thenReturn(new com.eickrono.api.identidade.aplicacao.modelo.SessaoInternaAutenticada(
+                        true,
+                        "Bearer",
+                        "access-token",
+                        "refresh-token",
+                        3600
+                ));
+        when(clienteContextoPessoaPerfilSistema.buscarPorEmail("a@a.com"))
+                .thenReturn(Optional.of(new ContextoPessoaPerfilSistema(
+                        10L,
+                        "sub-123",
+                        "a@a.com",
+                        "Ana",
+                        "usuario-1",
+                        "LIBERADO"
+                )));
+
+        mockMvc.perform(post("/api/publica/sessoes")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "aplicacaoId": "eickrono-thimisu-app",
+                                  "login": "a@a.com",
+                                  "senha": "SenhaForte123",
+                                  "contextoSocialPendenteId": "66666666-6666-6666-6666-666666666666",
+                                  "dispositivo": {
+                                    "plataforma": "IOS",
+                                    "identificadorInstalacao": "instalacao-teste",
+                                    "modelo": "simulador",
+                                    "sistemaOperacional": "ios",
+                                    "versaoSistema": "18",
+                                    "versaoApp": "1.0.0"
+                                  },
+                                  "atestacao": {
+                                    "plataforma": "IOS",
+                                    "provedor": "APPLE_APP_ATTEST",
+                                    "tipoComprovante": "OBJETO_ASSERCAO",
+                                    "identificadorDesafio": "desafio",
+                                    "desafioBase64": "ZGVzYWZpbw==",
+                                    "conteudoComprovante": "Y29tcHJvdmFudGU=",
+                                    "geradoEm": "2026-03-26T20:00:00Z",
+                                    "chaveId": "chave"
+                                  },
+                                  "segurancaAplicativo": {
+                                    "plataforma": "IOS",
+                                    "provedorAtestacao": "APPLE_APP_ATTEST",
+                                    "rootOuJailbreak": false,
+                                    "debuggerDetectado": false,
+                                    "hookingSuspeito": false,
+                                    "tamperSuspeito": false,
+                                    "riscoCapturaTela": false,
+                                    "assinaturaValida": true,
+                                    "identidadeAplicativoValida": true,
+                                    "sinaisRisco": [],
+                                    "scoreRiscoLocal": 0,
+                                    "bundleIdentifier": "com.eickrono.thimisu",
+                                    "teamIdentifier": "TEAM123"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.autenticado").value(true))
+                .andExpect(jsonPath("$.tokenDispositivo").value("device-token-teste"));
+
+        verify(vinculoSocialService).vincularContextoPendenteAposLoginLocal(
+                eq("access-token"),
+                eq(contextoPendente),
+                eq("eickrono-thimisu-app")
+        );
     }
 
     @Test

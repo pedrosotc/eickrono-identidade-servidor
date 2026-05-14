@@ -114,6 +114,14 @@ identidade:
         token-exchange-scope: ${IDENTIDADE_SESSAO_INTERNA_KEYCLOAK_TOKEN_EXCHANGE_SCOPE:}
         password-pepper: ${EICKRONO_PASSWORD_PEPPER:}
         timeout: PT5S
+  social:
+    nativo:
+      timeout: ${IDENTIDADE_SOCIAL_NATIVO_TIMEOUT:PT5S}
+      google-token-info-url: ${IDENTIDADE_SOCIAL_NATIVO_GOOGLE_TOKEN_INFO_URL:https://oauth2.googleapis.com/tokeninfo}
+      google-audiencias-permitidas: ${IDENTIDADE_SOCIAL_NATIVO_GOOGLE_AUDIENCIAS_PERMITIDAS:}
+      apple-issuer: ${IDENTIDADE_SOCIAL_NATIVO_APPLE_ISSUER:https://appleid.apple.com}
+      apple-jwk-set-uri: ${IDENTIDADE_SOCIAL_NATIVO_APPLE_JWK_SET_URI:https://appleid.apple.com/auth/keys}
+      apple-audiencias-permitidas: ${IDENTIDADE_SOCIAL_NATIVO_APPLE_AUDIENCIAS_PERMITIDAS:${IDENTIDADE_ATESTACAO_APP_APPLE_BUNDLE_IDENTIFIER:}}
   dispositivo:
     onboarding:
       sms-habilitado: false

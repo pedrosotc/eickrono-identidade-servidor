@@ -167,6 +167,57 @@ class VinculoSocialServiceTest {
     }
 
     @Test
+    @DisplayName("entrar e vincular: deve materializar vínculo social pendente sem novo token social")
+    void deveVincularContextoPendenteAposLoginLocal() throws Exception {
+        inicializarServico();
+        PerfilIdentidade perfil = criarPerfil();
+        Pessoa pessoa = criarPessoa();
+        Jwt jwt = jwt("sub-123");
+        UUID contextoId = UUID.fromString("aaaaaaaa-1111-2222-3333-bbbbbbbbbbbb");
+        ContextoSocialPendenteJdbc.ContextoSocialPendenteAtivo contexto =
+                new ContextoSocialPendenteJdbc.ContextoSocialPendenteAtivo(
+                        contextoId,
+                        1L,
+                        "apple",
+                        "apple-user-id",
+                        "apple-user",
+                        "Pessoa Apple",
+                        null,
+                        UUID.fromString("cccccccc-1111-2222-3333-dddddddddddd"),
+                        "teste@eickrono.com",
+                        "ENTRAR_E_VINCULAR",
+                        0,
+                        3
+                );
+        when(jwtDecoder.decode("access-login")).thenReturn(jwt);
+        when(provisionamentoIdentidadeService.provisionarOuAtualizar(jwt)).thenReturn(pessoa);
+        when(perfilRepositorio.findBySub("sub-123")).thenReturn(Optional.of(perfil));
+
+        vinculoSocialService.vincularContextoPendenteAposLoginLocal(
+                "access-login",
+                contexto,
+                "eickrono-thimisu-app");
+
+        verify(clienteAdministracaoCadastroKeycloak).vincularIdentidadeFederada(
+                eq("sub-123"),
+                eq(new IdentidadeFederadaKeycloak(
+                        ProvedorVinculoSocial.APPLE,
+                        "apple-user-id",
+                        "apple-user",
+                        "Pessoa Apple",
+                        null)));
+        verify(contextoSocialPendenteJdbc).consumirSeCompativel(contextoId, "teste@eickrono.com");
+        assertThat(vinculosPersistidos)
+                .extracting(VinculoSocial::getProvedor, VinculoSocial::getIdentificador)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("apple", "apple-user"));
+        assertThat(formasAcessoPersistidas)
+                .extracting(FormaAcesso::getProvedor, FormaAcesso::getIdentificador)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("APPLE", "apple-user-id"));
+        assertThat(auditorias).hasSize(1);
+        assertThat(auditorias.getFirst().getTipoEvento()).isEqualTo("VINCULO_SOCIAL_VINCULADO");
+    }
+
+    @Test
     @DisplayName("remover vínculo social: deve remover no Keycloak e limpar a projeção local")
     void deveRemoverVinculoSocial() throws Exception {
         inicializarServico();
