@@ -110,6 +110,7 @@ public class ClienteContextoPessoaPerfilSistemaHttp implements ClienteContextoPe
                 resposta.subPessoa(),
                 resposta.emailAtual(),
                 resposta.nomeAtual(),
+                resposta.usuario(),
                 resposta.perfilSistemaId(),
                 resposta.statusPerfilSistema()
         );
@@ -144,6 +145,7 @@ public class ClienteContextoPessoaPerfilSistemaHttp implements ClienteContextoPe
             String subPessoa,
             String emailAtual,
             String nomeAtual,
+            String usuario,
             String perfilSistemaId,
             String statusPerfilSistema
     ) {

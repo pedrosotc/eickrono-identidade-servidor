@@ -16,6 +16,7 @@ class ClienteContextoPessoaPerfilSistemaHttpTest {
                         "sub-central-001",
                         "ana@eickrono.com",
                         "Ana",
+                        "ana.souza",
                         "perfil-uuid-001",
                         "LIBERADO"
                 )
@@ -25,6 +26,7 @@ class ClienteContextoPessoaPerfilSistemaHttpTest {
         assertThat(contexto.sub()).isEqualTo("sub-central-001");
         assertThat(contexto.emailPrincipal()).isEqualTo("ana@eickrono.com");
         assertThat(contexto.nome()).isEqualTo("Ana");
+        assertThat(contexto.usuario()).isEqualTo("ana.souza");
         assertThat(contexto.perfilSistemaId()).isEqualTo("perfil-uuid-001");
         assertThat(contexto.statusPerfilSistema()).isEqualTo("LIBERADO");
     }
