@@ -18,6 +18,10 @@ public interface CadastroContaRepositorio extends JpaRepository<CadastroConta, L
 
     Optional<CadastroConta> findTopByEmailPrincipalOrderByAtualizadoEmDesc(String emailPrincipal);
 
+    Optional<CadastroConta> findTopByPessoaIdPerfilOrderByAtualizadoEmDesc(Long pessoaIdPerfil);
+
+    Optional<CadastroConta> findTopByUsuarioIgnoreCaseOrderByAtualizadoEmDesc(String usuario);
+
     Optional<CadastroConta> findByUsuarioIgnoreCaseAndSistemaSolicitanteIgnoreCase(
             String usuario,
             String sistemaSolicitante

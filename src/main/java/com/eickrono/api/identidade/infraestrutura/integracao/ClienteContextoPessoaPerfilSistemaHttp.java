@@ -16,13 +16,11 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.lang.NonNull;
-import org.springframework.stereotype.Component;
 import org.springframework.web.client.DefaultResponseErrorHandler;
 import org.springframework.web.client.RestTemplate;
 
 import static org.springframework.http.HttpStatus.NOT_FOUND;
 
-@Component
 public class ClienteContextoPessoaPerfilSistemaHttp implements ClienteContextoPessoaPerfilSistema {
 
     private static final String HEADER_SEGREDO_INTERNO = "X-Eickrono-Internal-Secret";
