@@ -47,6 +47,7 @@ import com.eickrono.api.identidade.apresentacao.dto.fluxo.RedefinirSenhaRecupera
 import com.eickrono.api.identidade.apresentacao.dto.fluxo.SessaoApiResposta;
 import com.eickrono.api.identidade.apresentacao.dto.fluxo.StatusCadastroPublicoApiResposta;
 import com.eickrono.api.identidade.apresentacao.dto.fluxo.VinculoSocialPendenteApiRequest;
+import com.eickrono.api.identidade.dominio.modelo.FormaAcesso;
 import com.eickrono.api.identidade.dominio.repositorio.FormaAcessoRepositorio;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -605,6 +606,7 @@ public class FluxoPublicoController {
                 dispositivoRegistrado.tokenDispositivoExpiraEm(),
                 statusPerfilSistema,
                 contexto.emailPrincipal(),
+                contexto.usuario(),
                 false,
                 true,
                 true
@@ -676,7 +678,8 @@ public class FluxoPublicoController {
                 provedorNormalizado,
                 requisicao
         );
-        if (!identidadeSocialVinculadaLocalmente(credencialSocial)) {
+        Optional<FormaAcesso> formaAcessoSocial = formaAcessoSocialVinculadaLocalmente(credencialSocial);
+        if (formaAcessoSocial.isEmpty()) {
             throw resolverSocialSemContaLocal(requisicao, credencialSocial);
         }
 
@@ -704,6 +707,33 @@ public class FluxoPublicoController {
                 sessao.autenticado(),
                 sessao.expiresIn()
         );
+        ContextoPessoaPerfilSistema contexto = resolverContextoSessaoSocial(
+                formaAcessoSocial.orElseThrow(),
+                credencialSocial
+        ).orElseThrow(() -> {
+            LOGGER.warn(
+                    "login_social_publico_contexto_ausente provedor={} motivo=conta_nao_liberada",
+                    provedorNormalizado
+            );
+            return new FluxoPublicoException(
+                    HttpStatus.FORBIDDEN,
+                    "conta_nao_liberada",
+                    "A conta ainda não está liberada para utilizar o aplicativo."
+            );
+        });
+        String statusPerfilSistema = Objects.requireNonNullElse(contexto.statusPerfilSistema(), STATUS_LIBERADO);
+        if (!STATUS_LIBERADO.equalsIgnoreCase(statusPerfilSistema)) {
+            LOGGER.warn(
+                    "login_social_publico_contexto_bloqueado provedor={} statusPerfilSistema={}",
+                    provedorNormalizado,
+                    statusPerfilSistema
+            );
+            throw new FluxoPublicoException(
+                    HttpStatus.FORBIDDEN,
+                    "conta_nao_liberada",
+                    "A conta ainda não está liberada para utilizar o aplicativo."
+            );
+        }
         return new SessaoApiResposta(
                 sessao.autenticado(),
                 sessao.tipoToken(),
@@ -712,8 +742,9 @@ public class FluxoPublicoController {
                 sessao.expiresIn(),
                 null,
                 null,
-                "",
-                null,
+                statusPerfilSistema,
+                contexto.emailPrincipal(),
+                contexto.usuario(),
                 false,
                 false,
                 true
@@ -756,12 +787,26 @@ public class FluxoPublicoController {
         );
     }
 
-    private boolean identidadeSocialVinculadaLocalmente(final CredencialSocialNativaValidada credencialSocial) {
+    private Optional<FormaAcesso> formaAcessoSocialVinculadaLocalmente(
+            final CredencialSocialNativaValidada credencialSocial) {
         return formaAcessoRepositorio.findByTipoAndProvedorAndIdentificador(
                 TipoFormaAcesso.SOCIAL,
                 credencialSocial.provedor().getAliasFormaAcesso(),
                 credencialSocial.identificadorExterno()
-        ).isPresent();
+        );
+    }
+
+    private Optional<ContextoPessoaPerfilSistema> resolverContextoSessaoSocial(
+            final FormaAcesso formaAcesso,
+            final CredencialSocialNativaValidada credencialSocial) {
+        Optional<ContextoPessoaPerfilSistema> contextoPorPessoa = Optional.ofNullable(formaAcesso.getPessoa())
+                .map(pessoa -> pessoa.getId())
+                .flatMap(clienteContextoPessoaPerfilSistema::buscarPorPessoaId);
+        if (contextoPorPessoa.isPresent()) {
+            return contextoPorPessoa;
+        }
+        return Optional.ofNullable(normalizarEmail(credencialSocial.email()))
+                .flatMap(clienteContextoPessoaPerfilSistema::buscarPorEmail);
     }
 
     private FluxoPublicoException resolverSocialSemContaLocal(
@@ -918,6 +963,7 @@ public class FluxoPublicoController {
                 null,
                 null,
                 STATUS_LIBERADO,
+                null,
                 null,
                 false,
                 true,

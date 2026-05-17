@@ -13,6 +13,7 @@ public record SessaoApiResposta(
         java.time.OffsetDateTime tokenDispositivoExpiraEm,
         @JsonProperty("statusUsuario") String statusPerfilSistema,
         String emailPrincipal,
+        String usuario,
         boolean primeiraSessao,
         boolean podeOferecerBiometria,
         boolean podeOferecerVinculacaoSocial

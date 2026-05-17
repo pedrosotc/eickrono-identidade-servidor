@@ -524,11 +524,27 @@ class FluxoPublicoControllerIT {
 
     @Test
     void deveEmitirSessaoSocialQuandoIdentidadeJaEstaVinculadaLocalmente() throws Exception {
+        com.eickrono.api.identidade.dominio.modelo.Pessoa pessoa =
+                org.mockito.Mockito.mock(com.eickrono.api.identidade.dominio.modelo.Pessoa.class);
+        when(pessoa.getId()).thenReturn(10L);
+        com.eickrono.api.identidade.dominio.modelo.FormaAcesso formaAcesso =
+                org.mockito.Mockito.mock(com.eickrono.api.identidade.dominio.modelo.FormaAcesso.class);
+        when(formaAcesso.getPessoa()).thenReturn(pessoa);
         when(formaAcessoRepositorio.findByTipoAndProvedorAndIdentificador(
                 TipoFormaAcesso.SOCIAL,
                 "APPLE",
                 "apple-user-123"
-        )).thenReturn(Optional.of(org.mockito.Mockito.mock(com.eickrono.api.identidade.dominio.modelo.FormaAcesso.class)));
+        )).thenReturn(Optional.of(formaAcesso));
+        when(clienteContextoPessoaPerfilSistema.buscarPorPessoaId(10L))
+                .thenReturn(Optional.of(new ContextoPessoaPerfilSistema(
+                        10L,
+                        "sub-estudiante",
+                        "estudiantemeduba@gmail.com",
+                        "Estudiante Meduba",
+                        "estudiantemeduba",
+                        "perfil-estudiante",
+                        "LIBERADO"
+                )));
         when(autenticacaoSessaoInternaServico.autenticarSocial("apple", "apple-id-token"))
                 .thenReturn(new com.eickrono.api.identidade.aplicacao.modelo.SessaoInternaAutenticada(
                         true,
@@ -586,7 +602,10 @@ class FluxoPublicoControllerIT {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.autenticado").value(true))
-                .andExpect(jsonPath("$.accessToken").value("access-token-social"));
+                .andExpect(jsonPath("$.accessToken").value("access-token-social"))
+                .andExpect(jsonPath("$.statusUsuario").value("LIBERADO"))
+                .andExpect(jsonPath("$.emailPrincipal").value("estudiantemeduba@gmail.com"))
+                .andExpect(jsonPath("$.usuario").value("estudiantemeduba"));
     }
 
     @Test
@@ -810,6 +829,7 @@ class FluxoPublicoControllerIT {
                         "sub-ana-souza",
                         "ana@eickrono.com",
                         "Ana Souza",
+                        "ana.souza",
                         "usuario-id-ana",
                         "LIBERADO"
                 )));
@@ -867,6 +887,8 @@ class FluxoPublicoControllerIT {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.autenticado").value(true))
                 .andExpect(jsonPath("$.statusUsuario").value("LIBERADO"))
+                .andExpect(jsonPath("$.emailPrincipal").value("ana@eickrono.com"))
+                .andExpect(jsonPath("$.usuario").value("ana.souza"))
                 .andExpect(jsonPath("$.tokenDispositivo").value("device-token-teste"));
 
         verify(clienteContextoPessoaPerfilSistema).buscarPorIdentificadorPublicoSistema("ana.souza");
