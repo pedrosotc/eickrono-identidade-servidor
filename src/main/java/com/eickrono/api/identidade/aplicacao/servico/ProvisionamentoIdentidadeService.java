@@ -307,7 +307,7 @@ public class ProvisionamentoIdentidadeService {
             return Optional.of(booleano);
         }
         if (valor instanceof String texto && !texto.isBlank()) {
-            return Optional.of(Boolean.parseBoolean(texto));
+            return Optional.of(Boolean.valueOf(texto));
         }
         return Optional.empty();
     }

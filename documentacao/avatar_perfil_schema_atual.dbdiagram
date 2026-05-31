@@ -1,0 +1,165 @@
+{
+  "version": "1.0.0",
+  "darkMode": true,
+  "gridEnabling": false,
+  "detailLevel": "All",
+  "tablePositions": [
+    {
+      "name": "perfis_identidade",
+      "schemaName": "public",
+      "x": 12,
+      "y": 12
+    },
+    {
+      "name": "vinculos_sociais",
+      "schemaName": "public",
+      "x": 536.0849609375,
+      "y": 12
+    },
+    {
+      "name": "pessoas_identidade",
+      "schemaName": "public",
+      "x": 976.373046875,
+      "y": 12
+    },
+    {
+      "name": "pessoas_formas_acesso",
+      "schemaName": "public",
+      "x": 1500.4580078125,
+      "y": 12
+    },
+    {
+      "name": "clientes_ecossistema",
+      "schemaName": "catalogo",
+      "x": 12,
+      "y": 1218
+    },
+    {
+      "name": "usuarios",
+      "schemaName": "autenticacao",
+      "x": 12,
+      "y": 1680
+    },
+    {
+      "name": "usuarios_formas_acesso",
+      "schemaName": "autenticacao",
+      "x": 823.135431707735,
+      "y": 1645.2841562234335
+    },
+    {
+      "name": "usuarios_clientes_ecossistema",
+      "schemaName": "autenticacao",
+      "x": 1236.7900390625,
+      "y": 1218
+    },
+    {
+      "name": "cadastros_conta",
+      "schemaName": "public",
+      "x": 1940.74609375,
+      "y": 12
+    }
+  ],
+  "tableGroupCollapseStates": [],
+  "stickyNoteLayouts": [],
+  "referencePaths": [
+    {
+      "firstFieldNames": [
+        "perfil_id"
+      ],
+      "firstTableName": "vinculos_sociais",
+      "firstSchemaName": "public",
+      "firstRelation": "*",
+      "secondFieldNames": [
+        "id"
+      ],
+      "secondTableName": "perfis_identidade",
+      "secondSchemaName": "public",
+      "secondRelation": "1",
+      "checkPoints": []
+    },
+    {
+      "firstFieldNames": [
+        "pessoa_id"
+      ],
+      "firstTableName": "pessoas_formas_acesso",
+      "firstSchemaName": "public",
+      "firstRelation": "*",
+      "secondFieldNames": [
+        "id"
+      ],
+      "secondTableName": "pessoas_identidade",
+      "secondSchemaName": "public",
+      "secondRelation": "1",
+      "checkPoints": []
+    },
+    {
+      "firstFieldNames": [
+        "usuario_id"
+      ],
+      "firstTableName": "usuarios_formas_acesso",
+      "firstSchemaName": "autenticacao",
+      "firstRelation": "*",
+      "secondFieldNames": [
+        "id"
+      ],
+      "secondTableName": "usuarios",
+      "secondSchemaName": "autenticacao",
+      "secondRelation": "1",
+      "checkPoints": []
+    },
+    {
+      "firstFieldNames": [
+        "usuario_id"
+      ],
+      "firstTableName": "usuarios_clientes_ecossistema",
+      "firstSchemaName": "autenticacao",
+      "firstRelation": "*",
+      "secondFieldNames": [
+        "id"
+      ],
+      "secondTableName": "usuarios",
+      "secondSchemaName": "autenticacao",
+      "secondRelation": "1",
+      "checkPoints": [
+        {
+          "x": 575.5750405906052,
+          "y": 1298
+        },
+        {
+          "x": 575.5750405906052,
+          "y": 1728
+        }
+      ]
+    },
+    {
+      "firstFieldNames": [
+        "cliente_ecossistema_id"
+      ],
+      "firstTableName": "usuarios_clientes_ecossistema",
+      "firstSchemaName": "autenticacao",
+      "firstRelation": "*",
+      "secondFieldNames": [
+        "id"
+      ],
+      "secondTableName": "clientes_ecossistema",
+      "secondSchemaName": "catalogo",
+      "secondRelation": "1",
+      "checkPoints": []
+    },
+    {
+      "firstFieldNames": [
+        "avatar_preferido_forma_acesso_id"
+      ],
+      "firstTableName": "usuarios_clientes_ecossistema",
+      "firstSchemaName": "autenticacao",
+      "firstRelation": "*",
+      "secondFieldNames": [
+        "id"
+      ],
+      "secondTableName": "usuarios_formas_acesso",
+      "secondSchemaName": "autenticacao",
+      "secondRelation": "1",
+      "checkPoints": []
+    }
+  ]
+}

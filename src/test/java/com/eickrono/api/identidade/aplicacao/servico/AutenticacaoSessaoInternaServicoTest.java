@@ -12,6 +12,8 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import com.eickrono.api.identidade.aplicacao.modelo.SessaoInternaAutenticada;
 import com.eickrono.api.identidade.aplicacao.modelo.UsuarioCadastroKeycloakExistente;
 import com.eickrono.api.identidade.infraestrutura.configuracao.SessaoInternaKeycloakProperties;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.Objects;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -177,6 +179,36 @@ class AutenticacaoSessaoInternaServicoTest {
     }
 
     @Test
+    @DisplayName("deve renovar refresh token social usando o client do token exchange")
+    void deveRenovarSessaoSocialComClientDoTokenExchange() {
+        String refreshTokenSocial = jwtComAzp("eickrono-autenticacao-interno");
+        mockServer.expect(requestTo(URL_TOKEN))
+                .andExpect(method(POST))
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_FORM_URLENCODED))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("grant_type=refresh_token")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("client_id=eickrono-autenticacao-interno")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("client_secret=segredo-token-exchange")))
+                .andExpect(content().string(org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("client_id=app-flutter-local"))))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("refresh_token=" + refreshTokenSocial)))
+                .andRespond(withSuccess("""
+                        {
+                          "access_token": "access-social-renovado",
+                          "refresh_token": "refresh-social-renovado",
+                          "expires_in": 1800,
+                          "token_type": "Bearer"
+                        }
+                        """, MediaType.APPLICATION_JSON));
+
+        SessaoInternaAutenticada sessao = servico.renovar(refreshTokenSocial, null);
+
+        assertThat(sessao.autenticado()).isTrue();
+        assertThat(sessao.accessToken()).isEqualTo("access-social-renovado");
+        assertThat(sessao.refreshToken()).isEqualTo("refresh-social-renovado");
+        mockServer.verify();
+    }
+
+    @Test
     @DisplayName("deve trocar token Google externo por sessao interna com refresh token")
     void deveAutenticarSessaoInternaComGoogle() {
         mockServer.expect(requestTo(URL_TOKEN))
@@ -239,5 +271,17 @@ class AutenticacaoSessaoInternaServicoTest {
         assertThat(sessao.accessToken()).isEqualTo("access-apple-123");
         assertThat(sessao.refreshToken()).isEqualTo("refresh-apple-456");
         mockServer.verify();
+    }
+
+    private static String jwtComAzp(final String azp) {
+        String cabecalho = base64Url("{}");
+        String payload = base64Url("{\"azp\":\"" + azp + "\"}");
+        return cabecalho + "." + payload + ".assinatura";
+    }
+
+    private static String base64Url(final String texto) {
+        return Base64.getUrlEncoder()
+                .withoutPadding()
+                .encodeToString(texto.getBytes(StandardCharsets.UTF_8));
     }
 }

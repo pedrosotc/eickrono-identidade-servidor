@@ -11,7 +11,8 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  */
 @Configuration
 @EnableConfigurationProperties({DispositivoProperties.class, CadastroEmailProperties.class,
-        PerfilDominioBackchannelProperties.class, SegurancaAplicativoProperties.class})
+        PerfilDominioBackchannelProperties.class, SegurancaAplicativoProperties.class,
+        AvatarStorageProperties.class, AvatarRemocaoProperties.class})
 @EnableScheduling
 public class InfraestruturaBasicaConfiguracao {
 

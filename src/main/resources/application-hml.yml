@@ -53,6 +53,18 @@ integracao:
     disponibilidade-url-base: ${INTEGRACAO_PERFIL_DISPONIBILIDADE_URL_BASE:https://id-hml-interno.hml.eickrono.internal:8443}
 
 identidade:
+  avatar:
+    storage:
+      tipo: ${IDENTIDADE_AVATAR_STORAGE_TIPO:s3}
+      bucket: ${IDENTIDADE_AVATAR_STORAGE_BUCKET:eickrono-avatares-hml}
+      region: ${IDENTIDADE_AVATAR_STORAGE_REGION:sa-east-1}
+      public-url-base: ${IDENTIDADE_AVATAR_STORAGE_PUBLIC_URL_BASE:https://id-hml.eickrono.store/identidade/avatares/publicos}
+      max-bytes: ${IDENTIDADE_AVATAR_STORAGE_MAX_BYTES:5242880}
+    remocao:
+      pendencia-retencao-dias: ${IDENTIDADE_AVATAR_REMOCAO_PENDENCIA_RETENCAO_DIAS:30}
+      worker-habilitado: ${IDENTIDADE_AVATAR_REMOCAO_WORKER_HABILITADO:false}
+      lote-maximo: ${IDENTIDADE_AVATAR_REMOCAO_LOTE_MAXIMO:20}
+      tentativas-maximas: ${IDENTIDADE_AVATAR_REMOCAO_TENTATIVAS_MAXIMAS:5}
   seguranca:
     app:
       modo-observacao: true

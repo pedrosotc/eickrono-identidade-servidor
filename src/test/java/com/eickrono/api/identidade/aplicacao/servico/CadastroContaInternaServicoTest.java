@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -14,21 +15,20 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.eickrono.api.identidade.aplicacao.excecao.FluxoPublicoException;
+import com.eickrono.api.identidade.aplicacao.modelo.AvatarCadastroConfirmado;
 import com.eickrono.api.identidade.aplicacao.modelo.CadastroInternoRealizado;
 import com.eickrono.api.identidade.aplicacao.modelo.CadastroKeycloakProvisionado;
 import com.eickrono.api.identidade.aplicacao.modelo.ConfirmacaoEmailCadastroInternoRealizada;
 import com.eickrono.api.identidade.aplicacao.modelo.ConfirmacaoEmailCadastroPublicoRealizada;
 import com.eickrono.api.identidade.aplicacao.modelo.ConviteOrganizacionalValidado;
 import com.eickrono.api.identidade.aplicacao.modelo.ContextoSolicitacaoFluxoPublico;
-import com.eickrono.api.identidade.aplicacao.modelo.IdentidadeFederadaKeycloak;
 import com.eickrono.api.identidade.aplicacao.modelo.ProjetoFluxoPublicoResolvido;
 import com.eickrono.api.identidade.aplicacao.modelo.ProvisionamentoPerfilSistemaRealizado;
-import com.eickrono.api.identidade.aplicacao.modelo.VinculoSocialPendenteCadastro;
 import com.eickrono.api.identidade.aplicacao.modelo.ContextoPessoaPerfilSistema;
+import com.eickrono.api.identidade.aplicacao.modelo.VinculoSocialConfirmadoCadastro;
 import com.eickrono.api.identidade.dominio.modelo.CanalValidacaoTelefoneCadastro;
 import com.eickrono.api.identidade.dominio.modelo.CadastroConta;
 import com.eickrono.api.identidade.dominio.modelo.FormaAcesso;
-import com.eickrono.api.identidade.dominio.modelo.PerfilIdentidade;
 import com.eickrono.api.identidade.dominio.modelo.Pessoa;
 import com.eickrono.api.identidade.dominio.modelo.ProvedorVinculoSocial;
 import com.eickrono.api.identidade.dominio.modelo.StatusCadastroConta;
@@ -37,7 +37,6 @@ import com.eickrono.api.identidade.dominio.modelo.TipoPessoaCadastro;
 import com.eickrono.api.identidade.dominio.modelo.TipoFormaAcesso;
 import com.eickrono.api.identidade.dominio.modelo.ConviteOrganizacional;
 import com.eickrono.api.identidade.dominio.modelo.VinculoOrganizacional;
-import com.eickrono.api.identidade.dominio.modelo.VinculoSocial;
 import com.eickrono.api.identidade.dominio.repositorio.CadastroContaRepositorio;
 import com.eickrono.api.identidade.dominio.repositorio.ConviteOrganizacionalRepositorio;
 import com.eickrono.api.identidade.dominio.repositorio.FormaAcessoRepositorio;
@@ -45,7 +44,6 @@ import com.eickrono.api.identidade.dominio.repositorio.PerfilIdentidadeRepositor
 import com.eickrono.api.identidade.dominio.repositorio.PessoaRepositorio;
 import com.eickrono.api.identidade.dominio.repositorio.RecuperacaoSenhaRepositorio;
 import com.eickrono.api.identidade.dominio.repositorio.VinculoOrganizacionalRepositorio;
-import com.eickrono.api.identidade.dominio.repositorio.VinculoSocialRepositorio;
 import com.eickrono.api.identidade.infraestrutura.configuracao.DispositivoProperties;
 import java.time.Clock;
 import java.time.Instant;
@@ -53,8 +51,6 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.http.HttpStatus;
 import org.junit.jupiter.api.DisplayName;
@@ -86,9 +82,6 @@ class CadastroContaInternaServicoTest {
     private PerfilIdentidadeRepositorio perfilIdentidadeRepositorio;
 
     @Mock
-    private VinculoSocialRepositorio vinculoSocialRepositorio;
-
-    @Mock
     private ConviteOrganizacionalRepositorio conviteOrganizacionalRepositorio;
 
     @Mock
@@ -113,6 +106,15 @@ class CadastroContaInternaServicoTest {
     private AuditoriaService auditoriaService;
 
     @Mock
+    private CadastroAvatarConfirmadoJdbc cadastroAvatarConfirmadoJdbc;
+
+    @Mock
+    private CadastroVinculoSocialConfirmadoJdbc cadastroVinculoSocialConfirmadoJdbc;
+
+    @Mock
+    private AvatarSocialProjetoJdbc avatarSocialProjetoJdbc;
+
+    @Mock
     private ClienteContextoPessoaPerfilSistema clienteContextoPessoaPerfilSistema;
 
     @Mock
@@ -120,9 +122,6 @@ class CadastroContaInternaServicoTest {
 
     @Mock
     private ConsultadorDisponibilidadeUsuarioSistemaServico consultadorDisponibilidadeUsuarioSistemaServico;
-
-    @Mock
-    private ContextoSocialPendenteJdbc contextoSocialPendenteJdbc;
 
     @Captor
     private ArgumentCaptor<CadastroConta> cadastroCaptor;
@@ -134,21 +133,15 @@ class CadastroContaInternaServicoTest {
     private ArgumentCaptor<FormaAcesso> formaAcessoCaptor;
 
     @Captor
-    private ArgumentCaptor<VinculoSocial> vinculoSocialCaptor;
-
-    @Captor
     private ArgumentCaptor<VinculoOrganizacional> vinculoOrganizacionalCaptor;
 
     @Captor
     private ArgumentCaptor<ConviteOrganizacional> conviteOrganizacionalCaptor;
 
-    @Captor
-    private ArgumentCaptor<IdentidadeFederadaKeycloak> identidadeFederadaCaptor;
-
     private CadastroContaInternaServico servico;
     private CadastroContaInternaServico servicoPublico;
     private CadastroContaInternaServico servicoPublicoToleranteFalhaDisponibilidade;
-    private CadastroContaInternaServico servicoPublicoComContextoSocialPendente;
+    private CadastroContaInternaServico servicoPublicoComAvatar;
 
     private CadastroContaInternaServico servico() {
         if (servico != null) {
@@ -184,7 +177,6 @@ class CadastroContaInternaServicoTest {
                 pessoaRepositorio,
                 perfilIdentidadeRepositorio,
                 formaAcessoRepositorio,
-                vinculoSocialRepositorio,
                 conviteOrganizacionalRepositorio,
                 vinculoOrganizacionalRepositorio,
                 provisionadorPerfilSistemaServico,
@@ -214,7 +206,6 @@ class CadastroContaInternaServicoTest {
                 pessoaRepositorio,
                 perfilIdentidadeRepositorio,
                 formaAcessoRepositorio,
-                vinculoSocialRepositorio,
                 conviteOrganizacionalRepositorio,
                 vinculoOrganizacionalRepositorio,
                 provisionadorPerfilSistemaServico,
@@ -227,28 +218,29 @@ class CadastroContaInternaServicoTest {
                 clock,
                 null,
                 auditoriaService,
-                null,
                 new ResolvedorContextoFluxoPublico(cadastroContaRepositorio, recuperacaoSenhaRepositorio),
                 aplicacaoId -> new ProjetoFluxoPublicoResolvido(0L, aplicacaoId, aplicacaoId, null, null, null, true),
+                null,
+                null,
+                null,
                 true
         );
         return servicoPublicoToleranteFalhaDisponibilidade;
     }
 
-    private CadastroContaInternaServico servicoPublicoComContextoSocialPendente() {
-        if (servicoPublicoComContextoSocialPendente != null) {
-            return servicoPublicoComContextoSocialPendente;
+    private CadastroContaInternaServico servicoPublicoComAvatar() {
+        if (servicoPublicoComAvatar != null) {
+            return servicoPublicoComAvatar;
         }
         DispositivoProperties dispositivoProperties = criarDispositivoProperties();
         Clock clock = Clock.fixed(Instant.parse("2026-03-19T10:00:00Z"), ZoneOffset.UTC);
-        servicoPublicoComContextoSocialPendente = new CadastroContaInternaServico(
+        servicoPublicoComAvatar = new CadastroContaInternaServico(
                 cadastroContaRepositorio,
                 clienteContextoPessoaPerfilSistema,
                 clienteAdministracaoCadastroKeycloak,
                 pessoaRepositorio,
                 perfilIdentidadeRepositorio,
                 formaAcessoRepositorio,
-                vinculoSocialRepositorio,
                 conviteOrganizacionalRepositorio,
                 vinculoOrganizacionalRepositorio,
                 provisionadorPerfilSistemaServico,
@@ -261,12 +253,22 @@ class CadastroContaInternaServicoTest {
                 clock,
                 null,
                 auditoriaService,
-                contextoSocialPendenteJdbc,
                 new ResolvedorContextoFluxoPublico(cadastroContaRepositorio, recuperacaoSenhaRepositorio),
-                aplicacaoId -> new ProjetoFluxoPublicoResolvido(0L, aplicacaoId, aplicacaoId, null, null, null, true),
+                aplicacaoId -> new ProjetoFluxoPublicoResolvido(
+                        42L,
+                        aplicacaoId,
+                        "Thimisu",
+                        "app",
+                        "Thimisu",
+                        "mobile",
+                        true
+                ),
+                cadastroVinculoSocialConfirmadoJdbc,
+                cadastroAvatarConfirmadoJdbc,
+                avatarSocialProjetoJdbc,
                 false
         );
-        return servicoPublicoComContextoSocialPendente;
+        return servicoPublicoComAvatar;
     }
 
     private DispositivoProperties criarDispositivoProperties() {
@@ -311,7 +313,6 @@ class CadastroContaInternaServicoTest {
                 "+5511999999999",
                 CanalValidacaoTelefoneCadastro.SMS,
                 "SenhaForte@123",
-                (VinculoSocialPendenteCadastro) null,
                 (ConviteOrganizacionalValidado) null,
                 "app-flutter-publico",
                 "127.0.0.1",
@@ -355,7 +356,6 @@ class CadastroContaInternaServicoTest {
                 pessoaRepositorio,
                 perfilIdentidadeRepositorio,
                 formaAcessoRepositorio,
-                vinculoSocialRepositorio,
                 conviteOrganizacionalRepositorio,
                 vinculoOrganizacionalRepositorio,
                 provisionadorPerfilSistemaServico,
@@ -377,7 +377,11 @@ class CadastroContaInternaServicoTest {
                         "Thimisu",
                         "mobile",
                         false
-                )
+                ),
+                null,
+                null,
+                null,
+                false
         );
 
         AtomicReference<CadastroConta> salvo = new AtomicReference<>();
@@ -853,6 +857,329 @@ class CadastroContaInternaServicoTest {
     }
 
     @Test
+    @DisplayName("deve registrar avatar confirmado recebido no cadastro publico")
+    void deveRegistrarAvatarConfirmadoRecebidoNoCadastroPublico() {
+        AtomicReference<CadastroConta> salvo = new AtomicReference<>();
+        AvatarCadastroConfirmado avatar = new AvatarCadastroConfirmado(
+                "THIMISU",
+                null,
+                null,
+                "avatar.png",
+                "image/png",
+                5L,
+                null,
+                null,
+                "YWJjZGU=",
+                true
+        );
+        when(cadastroContaRepositorio.findByUsuarioIgnoreCaseAndSistemaSolicitanteIgnoreCase(
+                eq("ana.souza"),
+                anyString())).thenReturn(Optional.empty());
+        when(consultadorDisponibilidadeUsuarioSistemaServico.usuarioDisponivel(eq("ana.souza"), anyString()))
+                .thenReturn(true);
+        when(cadastroContaRepositorio.findByEmailPrincipal("ana@eickrono.com")).thenReturn(Optional.empty());
+        when(clienteContextoPessoaPerfilSistema.buscarPorEmail("ana@eickrono.com")).thenReturn(Optional.empty());
+        when(clienteAdministracaoCadastroKeycloak.criarUsuarioPendente(
+                "Ana Souza", "ana@eickrono.com", "SenhaForte@123"))
+                .thenReturn(new CadastroKeycloakProvisionado("sub-ana", "ana@eickrono.com", "Ana Souza"));
+        when(cadastroContaRepositorio.save(any(CadastroConta.class))).thenAnswer(invocation -> {
+            CadastroConta cadastro = invocation.getArgument(0);
+            salvo.set(cadastro);
+            return cadastro;
+        });
+
+        CadastroInternoRealizado cadastro = servicoPublicoComAvatar().cadastrarPublico(
+                TipoPessoaCadastro.FISICA,
+                "Ana Souza",
+                null,
+                "ana.souza",
+                null,
+                null,
+                null,
+                "ana@eickrono.com",
+                "+5511999999999",
+                CanalValidacaoTelefoneCadastro.SMS,
+                "SenhaForte@123",
+                null,
+                "app-flutter-publico",
+                "app-flutter-publico",
+                "127.0.0.1",
+                "JUnit",
+                null,
+                List.of(avatar)
+        );
+
+        assertThat(cadastro.cadastroId()).isEqualTo(salvo.get().getCadastroId());
+        verify(cadastroAvatarConfirmadoJdbc).registrar(
+                eq(cadastro.cadastroId()),
+                argThat(avatares -> avatares.size() == 1
+                        && avatares.get(0).preferido()
+                        && "THIMISU".equals(avatares.get(0).origem())
+                        && "YWJjZGU=".equals(avatares.get(0).conteudoBase64()))
+        );
+    }
+
+    @Test
+    @DisplayName("deve consumir avatar confirmado ao finalizar cadastro publico")
+    void deveConsumirAvatarConfirmadoAoFinalizarCadastroPublico() {
+        AtomicReference<CadastroConta> salvo = new AtomicReference<>();
+        AvatarCadastroConfirmado avatar = new AvatarCadastroConfirmado(
+                "THIMISU",
+                null,
+                null,
+                "avatar.png",
+                "image/png",
+                5L,
+                null,
+                null,
+                "YWJjZGU=",
+                true
+        );
+        when(cadastroContaRepositorio.findByUsuarioIgnoreCaseAndSistemaSolicitanteIgnoreCase(
+                eq("ana.souza"),
+                anyString())).thenReturn(Optional.empty());
+        when(consultadorDisponibilidadeUsuarioSistemaServico.usuarioDisponivel(eq("ana.souza"), anyString()))
+                .thenReturn(true);
+        when(cadastroContaRepositorio.findByEmailPrincipal("ana@eickrono.com")).thenReturn(Optional.empty());
+        when(clienteContextoPessoaPerfilSistema.buscarPorEmail("ana@eickrono.com")).thenReturn(Optional.empty());
+        when(clienteAdministracaoCadastroKeycloak.criarUsuarioPendente(
+                "Ana Souza", "ana@eickrono.com", "SenhaForte@123"))
+                .thenReturn(new CadastroKeycloakProvisionado("sub-ana", "ana@eickrono.com", "Ana Souza"));
+        when(cadastroContaRepositorio.save(any(CadastroConta.class))).thenAnswer(invocation -> {
+            CadastroConta cadastro = invocation.getArgument(0);
+            salvo.set(cadastro);
+            return cadastro;
+        });
+        Pessoa pessoaConfirmada = pessoaCanonica("sub-ana", "ana@eickrono.com", "Ana Souza", 10L);
+        when(provisionamentoIdentidadeService.confirmarEmailCadastro(
+                eq("sub-ana"),
+                eq("ana@eickrono.com"),
+                eq("Ana Souza"),
+                any()
+        )).thenReturn(pessoaConfirmada);
+        when(provisionadorPerfilSistemaServico.provisionarCadastroConfirmado(any(CadastroConta.class), eq(10L)))
+                .thenReturn(new ProvisionamentoPerfilSistemaRealizado("usuario-001", "LIBERADO"));
+
+        CadastroInternoRealizado cadastro = servicoPublicoComAvatar().cadastrarPublico(
+                TipoPessoaCadastro.FISICA,
+                "Ana Souza",
+                null,
+                "ana.souza",
+                null,
+                null,
+                null,
+                "ana@eickrono.com",
+                "+5511999999999",
+                CanalValidacaoTelefoneCadastro.SMS,
+                "SenhaForte@123",
+                null,
+                "app-flutter-publico",
+                "app-flutter-publico",
+                "127.0.0.1",
+                "JUnit",
+                null,
+                List.of(avatar)
+        );
+        ArgumentCaptor<String> codigoEmailCaptor = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<String> codigoTelefoneCaptor = ArgumentCaptor.forClass(String.class);
+        verify(canalEnvioCodigoCadastroEmail).enviar(any(CadastroConta.class), codigoEmailCaptor.capture());
+        verify(canalEnvioCodigoCadastroTelefone).enviar(any(CadastroConta.class), codigoTelefoneCaptor.capture());
+        when(cadastroContaRepositorio.findByCadastroId(cadastro.cadastroId())).thenReturn(Optional.of(salvo.get()));
+
+        servicoPublicoComAvatar().confirmarEmailPublico(
+                cadastro.cadastroId(),
+                codigoEmailCaptor.getValue(),
+                codigoTelefoneCaptor.getValue()
+        );
+
+        verify(cadastroAvatarConfirmadoJdbc).consumirParaUsuario(
+                eq(cadastro.cadastroId()),
+                eq("sub-ana"),
+                eq(42L),
+                any(OffsetDateTime.class)
+        );
+    }
+
+    @Test
+    @DisplayName("deve vincular rede social confirmada ao finalizar cadastro publico")
+    void deveVincularRedeSocialConfirmadaAoFinalizarCadastroPublico() {
+        AtomicReference<CadastroConta> salvo = new AtomicReference<>();
+        VinculoSocialConfirmadoCadastro vinculoApple = new VinculoSocialConfirmadoCadastro(
+                "APPLE",
+                "apple-sub-123",
+                "apple-user",
+                "ana@apple.com",
+                "Ana Souza",
+                "https://cdn.example/avatar-apple.png",
+                true
+        );
+        when(cadastroContaRepositorio.findByUsuarioIgnoreCaseAndSistemaSolicitanteIgnoreCase(
+                eq("ana.souza"),
+                anyString())).thenReturn(Optional.empty());
+        when(consultadorDisponibilidadeUsuarioSistemaServico.usuarioDisponivel(eq("ana.souza"), anyString()))
+                .thenReturn(true);
+        when(cadastroContaRepositorio.findByEmailPrincipal("ana@eickrono.com")).thenReturn(Optional.empty());
+        when(clienteContextoPessoaPerfilSistema.buscarPorEmail("ana@eickrono.com")).thenReturn(Optional.empty());
+        when(clienteAdministracaoCadastroKeycloak.criarUsuarioPendente(
+                "Ana Souza", "ana@eickrono.com", "SenhaForte@123"))
+                .thenReturn(new CadastroKeycloakProvisionado("sub-ana", "ana@eickrono.com", "Ana Souza"));
+        when(cadastroContaRepositorio.save(any(CadastroConta.class))).thenAnswer(invocation -> {
+            CadastroConta cadastro = invocation.getArgument(0);
+            salvo.set(cadastro);
+            return cadastro;
+        });
+        Pessoa pessoaConfirmada = pessoaCanonica("sub-ana", "ana@eickrono.com", "Ana Souza", 10L);
+        when(provisionamentoIdentidadeService.confirmarEmailCadastro(
+                eq("sub-ana"),
+                eq("ana@eickrono.com"),
+                eq("Ana Souza"),
+                any()
+        )).thenReturn(pessoaConfirmada);
+        when(provisionadorPerfilSistemaServico.provisionarCadastroConfirmado(any(CadastroConta.class), eq(10L)))
+                .thenReturn(new ProvisionamentoPerfilSistemaRealizado("usuario-001", "LIBERADO"));
+        when(cadastroVinculoSocialConfirmadoJdbc.listarAtivos(any()))
+                .thenReturn(List.of(vinculoApple));
+        when(provisionamentoIdentidadeService.registrarFormaAcessoSocial(
+                eq(pessoaConfirmada),
+                eq("APPLE"),
+                eq("apple-sub-123"),
+                any()
+        )).thenReturn(new FormaAcesso(
+                pessoaConfirmada,
+                TipoFormaAcesso.SOCIAL,
+                "APPLE",
+                "apple-sub-123",
+                false,
+                OffsetDateTime.parse("2026-03-19T10:00:00Z"),
+                OffsetDateTime.parse("2026-03-19T10:00:00Z")
+        ));
+
+        CadastroInternoRealizado cadastro = servicoPublicoComAvatar().cadastrarPublico(
+                TipoPessoaCadastro.FISICA,
+                "Ana Souza",
+                null,
+                "ana.souza",
+                null,
+                null,
+                null,
+                "ana@eickrono.com",
+                "+5511999999999",
+                CanalValidacaoTelefoneCadastro.SMS,
+                "SenhaForte@123",
+                null,
+                "app-flutter-publico",
+                "app-flutter-publico",
+                "127.0.0.1",
+                "JUnit",
+                null,
+                List.of(vinculoApple),
+                List.of()
+        );
+        ArgumentCaptor<String> codigoEmailCaptor = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<String> codigoTelefoneCaptor = ArgumentCaptor.forClass(String.class);
+        verify(canalEnvioCodigoCadastroEmail).enviar(any(CadastroConta.class), codigoEmailCaptor.capture());
+        verify(canalEnvioCodigoCadastroTelefone).enviar(any(CadastroConta.class), codigoTelefoneCaptor.capture());
+        when(cadastroContaRepositorio.findByCadastroId(cadastro.cadastroId())).thenReturn(Optional.of(salvo.get()));
+
+        servicoPublicoComAvatar().confirmarEmailPublico(
+                cadastro.cadastroId(),
+                codigoEmailCaptor.getValue(),
+                codigoTelefoneCaptor.getValue()
+        );
+
+        verify(cadastroVinculoSocialConfirmadoJdbc).registrar(
+                eq(cadastro.cadastroId()),
+                argThat(vinculos -> vinculos.size() == 1
+                        && vinculos.get(0).avatarPreferido()
+                        && "APPLE".equals(vinculos.get(0).provedor())
+                        && "apple-sub-123".equals(vinculos.get(0).identificadorExterno()))
+        );
+        verify(provisionamentoIdentidadeService).registrarFormaAcessoSocial(
+                eq(pessoaConfirmada),
+                eq("APPLE"),
+                eq("apple-sub-123"),
+                any()
+        );
+        verify(clienteAdministracaoCadastroKeycloak).vincularIdentidadeFederada(
+                eq("sub-ana"),
+                argThat(identidade -> "apple-sub-123".equals(identidade.identificadorCanonico())
+                        && "apple-user".equals(identidade.identificadorExibicao())
+                        && "https://cdn.example/avatar-apple.png".equals(identidade.urlAvatarExterno()))
+        );
+        verify(avatarSocialProjetoJdbc).sincronizar(
+                eq("sub-ana"),
+                eq("ana@eickrono.com"),
+                eq(42L),
+                any(OffsetDateTime.class),
+                any(OffsetDateTime.class),
+                argThat(identidades -> identidades.size() == 1
+                        && "apple-sub-123".equals(identidades.get(0).identificadorCanonico()))
+        );
+        verify(avatarSocialProjetoJdbc).definirAvatarSocial(
+                eq("sub-ana"),
+                eq(42L),
+                eq(ProvedorVinculoSocial.APPLE),
+                any(OffsetDateTime.class)
+        );
+        verify(cadastroVinculoSocialConfirmadoJdbc).consumir(eq(cadastro.cadastroId()), any(OffsetDateTime.class));
+    }
+
+    @Test
+    @DisplayName("deve rejeitar cadastro publico com mais de um avatar preferido")
+    void deveRejeitarCadastroPublicoComMaisDeUmAvatarPreferido() {
+        AvatarCadastroConfirmado avatarLocal = new AvatarCadastroConfirmado(
+                "THIMISU",
+                null,
+                null,
+                "avatar.png",
+                "image/png",
+                5L,
+                null,
+                null,
+                "YWJjZGU=",
+                true
+        );
+        AvatarCadastroConfirmado avatarSocial = new AvatarCadastroConfirmado(
+                "GOOGLE",
+                "https://lh3.googleusercontent.com/avatar.png",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                true
+        );
+
+        assertThatThrownBy(() -> servicoPublicoComAvatar().cadastrarPublico(
+                TipoPessoaCadastro.FISICA,
+                "Ana Souza",
+                null,
+                "ana.souza",
+                null,
+                null,
+                null,
+                "ana@eickrono.com",
+                "+5511999999999",
+                CanalValidacaoTelefoneCadastro.SMS,
+                "SenhaForte@123",
+                null,
+                "app-flutter-publico",
+                "app-flutter-publico",
+                "127.0.0.1",
+                "JUnit",
+                null,
+                List.of(avatarLocal, avatarSocial)
+        ))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Apenas uma opção de avatar confirmada pode ser preferida.");
+
+        verify(clienteAdministracaoCadastroKeycloak, never()).criarUsuarioPendente(any(), any(), any());
+        verify(cadastroAvatarConfirmadoJdbc, never()).registrar(any(), any());
+    }
+
+    @Test
     @DisplayName("deve confirmar cadastro publico por telefone depois do e-mail ja confirmado")
     void deveConfirmarCadastroPublicoComTelefoneAposEmail() {
         AtomicReference<CadastroConta> salvo = new AtomicReference<>();
@@ -1088,49 +1415,6 @@ class CadastroContaInternaServicoTest {
     }
 
     @Test
-    @DisplayName("deve persistir o vínculo social pendente no cadastro público")
-    void devePersistirVinculoSocialPendenteNoCadastroPublico() {
-        when(cadastroContaRepositorio.findByUsuarioIgnoreCaseAndSistemaSolicitanteIgnoreCase(
-                eq("ana.souza"),
-                anyString())).thenReturn(Optional.empty());
-        when(consultadorDisponibilidadeUsuarioSistemaServico.usuarioDisponivel(eq("ana.souza"), anyString())).thenReturn(true);
-        when(cadastroContaRepositorio.findByEmailPrincipal("ana@eickrono.com")).thenReturn(Optional.empty());
-        when(clienteContextoPessoaPerfilSistema.buscarPorEmail("ana@eickrono.com")).thenReturn(Optional.empty());
-        when(clienteAdministracaoCadastroKeycloak.criarUsuarioPendente(
-                "Ana Souza", "ana@eickrono.com", "SenhaForte@123"))
-                .thenReturn(new CadastroKeycloakProvisionado("sub-ana", "ana@eickrono.com", "Ana Souza"));
-        when(cadastroContaRepositorio.save(any(CadastroConta.class))).thenAnswer(invocation -> invocation.getArgument(0));
-
-        servicoPublico().cadastrarPublico(
-                TipoPessoaCadastro.FISICA,
-                "Ana Souza",
-                null,
-                "ana.souza",
-                null,
-                null,
-                null,
-                "ana@eickrono.com",
-                "+5511999999999",
-                CanalValidacaoTelefoneCadastro.SMS,
-                "SenhaForte@123",
-                new VinculoSocialPendenteCadastro(
-                        ProvedorVinculoSocial.GOOGLE,
-                        "google-user-123",
-                        "ana.google"
-                ),
-                "app-flutter-publico",
-                "127.0.0.1",
-                "JUnit"
-        );
-
-        verify(cadastroContaRepositorio).save(cadastroCaptor.capture());
-        CadastroConta cadastroSalvo = cadastroCaptor.getValue();
-        assertThat(cadastroSalvo.getVinculoSocialPendenteProvedor()).isEqualTo("google");
-        assertThat(cadastroSalvo.getVinculoSocialPendenteIdentificadorExterno()).isEqualTo("google-user-123");
-        assertThat(cadastroSalvo.getVinculoSocialPendenteNomeUsuarioExterno()).isEqualTo("ana.google");
-    }
-
-    @Test
     @DisplayName("deve persistir o contexto do convite organizacional no cadastro público")
     void devePersistirContextoDoConviteOrganizacionalNoCadastroPublico() {
         when(cadastroContaRepositorio.findByUsuarioIgnoreCaseAndSistemaSolicitanteIgnoreCase(
@@ -1156,7 +1440,6 @@ class CadastroContaInternaServicoTest {
                 "+5511999999999",
                 CanalValidacaoTelefoneCadastro.SMS,
                 "SenhaForte@123",
-                null,
                 new ConviteOrganizacionalValidado(
                         "ORG-ACME-2026",
                         "org-acme",
@@ -1242,7 +1525,6 @@ class CadastroContaInternaServicoTest {
                 "+5511999999999",
                 CanalValidacaoTelefoneCadastro.SMS,
                 "SenhaForte@123",
-                null,
                 new ConviteOrganizacionalValidado(
                         "ORG-ACME-2026",
                         "org-acme",
@@ -1280,206 +1562,6 @@ class CadastroContaInternaServicoTest {
 
         verify(conviteOrganizacionalRepositorio).save(conviteOrganizacionalCaptor.capture());
         assertThat(conviteOrganizacionalCaptor.getValue().getStatus()).isEqualTo(StatusConviteOrganizacional.CONSUMIDO);
-    }
-
-    @Test
-    @DisplayName("deve vincular a identidade federada ao confirmar o e-mail do cadastro público")
-    void deveVincularIdentidadeFederadaAoConfirmarEmailDoCadastroPublico() {
-        AtomicReference<CadastroConta> salvo = new AtomicReference<>();
-        when(cadastroContaRepositorio.findByUsuarioIgnoreCaseAndSistemaSolicitanteIgnoreCase(
-                eq("ana.souza"),
-                anyString())).thenReturn(Optional.empty());
-        when(consultadorDisponibilidadeUsuarioSistemaServico.usuarioDisponivel(eq("ana.souza"), anyString())).thenReturn(true);
-        when(cadastroContaRepositorio.findByEmailPrincipal("ana@eickrono.com")).thenReturn(Optional.empty());
-        when(clienteContextoPessoaPerfilSistema.buscarPorEmail("ana@eickrono.com")).thenReturn(Optional.empty());
-        Pessoa pessoa = new Pessoa("sub-ana", "ana@eickrono.com", "Ana Souza", java.util.Set.of(), java.util.Set.of(),
-                OffsetDateTime.parse("2026-03-19T10:00:00Z"));
-        org.springframework.test.util.ReflectionTestUtils.setField(pessoa, "id", 10L);
-        PerfilIdentidade perfil = new PerfilIdentidade(
-                "sub-ana",
-                "ana@eickrono.com",
-                "Ana Souza",
-                java.util.Set.of(),
-                java.util.Set.of(),
-                OffsetDateTime.parse("2026-03-19T10:00:00Z"));
-        when(clienteAdministracaoCadastroKeycloak.criarUsuarioPendente(
-                "Ana Souza", "ana@eickrono.com", "SenhaForte@123"))
-                .thenReturn(new CadastroKeycloakProvisionado("sub-ana", "ana@eickrono.com", "Ana Souza"));
-        when(cadastroContaRepositorio.save(any(CadastroConta.class))).thenAnswer(invocation -> {
-            CadastroConta cadastro = invocation.getArgument(0);
-            salvo.set(cadastro);
-            return cadastro;
-        });
-        when(pessoaRepositorio.findById(10L)).thenReturn(Optional.of(pessoa));
-        when(perfilIdentidadeRepositorio.findBySub("sub-ana")).thenReturn(Optional.of(perfil));
-        when(formaAcessoRepositorio.findByTipoAndProvedorAndIdentificador(
-                TipoFormaAcesso.SOCIAL,
-                "GOOGLE",
-                "google-user-123")).thenReturn(Optional.empty());
-        when(formaAcessoRepositorio.findByPessoa(pessoa)).thenReturn(List.of());
-        when(vinculoSocialRepositorio.findByPerfil(perfil)).thenReturn(List.of());
-        Pessoa pessoaConfirmada = pessoaCanonica("sub-ana", "ana@eickrono.com", "Ana Souza", 10L);
-        when(provisionamentoIdentidadeService.confirmarEmailCadastro(
-                eq("sub-ana"),
-                eq("ana@eickrono.com"),
-                eq("Ana Souza"),
-                any()
-        ))
-                .thenReturn(pessoaConfirmada);
-        when(provisionadorPerfilSistemaServico.provisionarCadastroConfirmado(any(CadastroConta.class), eq(10L)))
-                .thenReturn(new com.eickrono.api.identidade.aplicacao.modelo.ProvisionamentoPerfilSistemaRealizado(
-                        "usuario-001",
-                        "LIBERADO"
-                ));
-
-        CadastroInternoRealizado cadastro = servicoPublico().cadastrarPublico(
-                TipoPessoaCadastro.FISICA,
-                "Ana Souza",
-                null,
-                "ana.souza",
-                null,
-                null,
-                null,
-                "ana@eickrono.com",
-                "+5511999999999",
-                CanalValidacaoTelefoneCadastro.SMS,
-                "SenhaForte@123",
-                new VinculoSocialPendenteCadastro(
-                        ProvedorVinculoSocial.GOOGLE,
-                        "google-user-123",
-                        "ana.google"
-                ),
-                "app-flutter-publico",
-                "127.0.0.1",
-                "JUnit"
-        );
-        ArgumentCaptor<String> codigoEmailCaptor = ArgumentCaptor.forClass(String.class);
-        ArgumentCaptor<String> codigoTelefoneCaptor = ArgumentCaptor.forClass(String.class);
-        verify(canalEnvioCodigoCadastroEmail).enviar(any(CadastroConta.class), codigoEmailCaptor.capture());
-        verify(canalEnvioCodigoCadastroTelefone).enviar(any(CadastroConta.class), codigoTelefoneCaptor.capture());
-        when(cadastroContaRepositorio.findByCadastroId(cadastro.cadastroId())).thenReturn(Optional.of(salvo.get()));
-
-        servicoPublico().confirmarEmailPublico(
-                cadastro.cadastroId(),
-                codigoEmailCaptor.getValue(),
-                codigoTelefoneCaptor.getValue()
-        );
-
-        verify(clienteAdministracaoCadastroKeycloak).vincularIdentidadeFederada(
-                "sub-ana",
-                new IdentidadeFederadaKeycloak(
-                        ProvedorVinculoSocial.GOOGLE,
-                        "google-user-123",
-                        "ana.google"
-                )
-        );
-        verify(formaAcessoRepositorio).save(formaAcessoCaptor.capture());
-        assertThat(formaAcessoCaptor.getValue().getTipo()).isEqualTo(TipoFormaAcesso.SOCIAL);
-        assertThat(formaAcessoCaptor.getValue().getProvedor()).isEqualTo("GOOGLE");
-        assertThat(formaAcessoCaptor.getValue().getIdentificador()).isEqualTo("google-user-123");
-        verify(vinculoSocialRepositorio).save(vinculoSocialCaptor.capture());
-        assertThat(vinculoSocialCaptor.getValue().getProvedor()).isEqualTo("google");
-        assertThat(vinculoSocialCaptor.getValue().getIdentificador()).isEqualTo("ana.google");
-        assertThat(salvo.get().getVinculoSocialPendenteProvedor()).isNull();
-        assertThat(salvo.get().getVinculoSocialPendenteIdentificadorExterno()).isNull();
-        assertThat(salvo.get().getVinculoSocialPendenteNomeUsuarioExterno()).isNull();
-    }
-
-    @Test
-    @DisplayName("deve vincular todos os contextos sociais pendentes do cadastro ao confirmar o email")
-    void deveVincularTodosOsContextosSociaisPendentesDoCadastroAoConfirmarEmail() {
-        AtomicReference<CadastroConta> salvo = new AtomicReference<>();
-        when(cadastroContaRepositorio.findByEmailPrincipal("ana@eickrono.com")).thenReturn(Optional.empty());
-        when(cadastroContaRepositorio.findByUsuarioIgnoreCaseAndSistemaSolicitanteIgnoreCase(
-                eq("ana.souza"),
-                anyString())).thenReturn(Optional.empty());
-        when(clienteContextoPessoaPerfilSistema.buscarPorEmail("ana@eickrono.com")).thenReturn(Optional.empty());
-        when(consultadorDisponibilidadeUsuarioSistemaServico.usuarioDisponivel(eq("ana.souza"), anyString())).thenReturn(true);
-        when(clienteAdministracaoCadastroKeycloak.criarUsuarioPendente(
-                "Ana Souza", "ana@eickrono.com", "SenhaForte@123"))
-                .thenReturn(new CadastroKeycloakProvisionado("sub-ana", "ana@eickrono.com", "Ana Souza"));
-        when(cadastroContaRepositorio.save(any(CadastroConta.class))).thenAnswer(invocation -> {
-            CadastroConta cadastro = invocation.getArgument(0);
-            salvo.set(cadastro);
-            return cadastro;
-        });
-        Pessoa pessoaConfirmada = pessoaCanonica("sub-ana", "ana@eickrono.com", "Ana Souza", 10L);
-        when(pessoaRepositorio.findById(10L)).thenReturn(Optional.of(pessoaConfirmada));
-        PerfilIdentidade perfil = new PerfilIdentidade(
-                "sub-ana",
-                "ana@eickrono.com",
-                "Ana Souza",
-                Set.of(),
-                Set.of(),
-                OffsetDateTime.parse("2026-03-19T10:00:00Z")
-        );
-        when(perfilIdentidadeRepositorio.findBySub("sub-ana")).thenReturn(Optional.of(perfil));
-        when(provisionamentoIdentidadeService.confirmarEmailCadastro(
-                eq("sub-ana"),
-                eq("ana@eickrono.com"),
-                eq("Ana Souza"),
-                any()
-        )).thenReturn(pessoaConfirmada);
-        when(provisionadorPerfilSistemaServico.provisionarCadastroConfirmado(any(CadastroConta.class), eq(10L)))
-                .thenReturn(new ProvisionamentoPerfilSistemaRealizado(
-                        "usuario-001",
-                        "LIBERADO"
-                ));
-        UUID googleId = UUID.randomUUID();
-        UUID appleId = UUID.randomUUID();
-        when(contextoSocialPendenteJdbc.listarPendentesAberturaCadastro(0L, "ana@eickrono.com"))
-                .thenReturn(List.of(
-                        new ContextoSocialPendenteJdbc.ContextoSocialPendenteCadastro(
-                                googleId,
-                                "google",
-                                "google-123",
-                                "ana.google",
-                                "Ana Google",
-                                "https://img/google.png"
-                        ),
-                        new ContextoSocialPendenteJdbc.ContextoSocialPendenteCadastro(
-                                appleId,
-                                "apple",
-                                "apple-123",
-                                "ana.apple",
-                                "Ana Apple",
-                                "https://img/apple.png"
-                        )
-                ));
-
-        CadastroInternoRealizado cadastro = servicoPublicoComContextoSocialPendente().cadastrarPublico(
-                TipoPessoaCadastro.FISICA,
-                "Ana Souza",
-                null,
-                "ana.souza",
-                null,
-                null,
-                null,
-                "ana@eickrono.com",
-                "+5511999999999",
-                CanalValidacaoTelefoneCadastro.SMS,
-                "SenhaForte@123",
-                "eickrono-thimisu-app",
-                "127.0.0.1",
-                "JUnit"
-        );
-        verify(canalEnvioCodigoCadastroEmail).enviar(any(CadastroConta.class), codigoCaptor.capture());
-        verify(canalEnvioCodigoCadastroTelefone).enviar(any(CadastroConta.class), codigoCaptor.capture());
-        when(cadastroContaRepositorio.findByCadastroId(cadastro.cadastroId())).thenReturn(Optional.of(salvo.get()));
-
-        servicoPublicoComContextoSocialPendente().confirmarEmailPublico(
-                cadastro.cadastroId(),
-                codigoCaptor.getAllValues().get(0),
-                codigoCaptor.getAllValues().get(1)
-        );
-
-        verify(clienteAdministracaoCadastroKeycloak, times(2))
-                .vincularIdentidadeFederada(eq("sub-ana"), identidadeFederadaCaptor.capture());
-        assertThat(identidadeFederadaCaptor.getAllValues())
-                .extracting(IdentidadeFederadaKeycloak::identificadorCanonico)
-                .containsExactly("google-123", "apple-123");
-        verify(contextoSocialPendenteJdbc).consumir(googleId);
-        verify(contextoSocialPendenteJdbc).consumir(appleId);
     }
 
     @Test

@@ -81,6 +81,7 @@ public class SegurancaConfiguracao {
                         "/identidade/atestacoes/interna/**",
                         "/identidade/pessoas/interna",
                         "/identidade/pessoas/interna/**",
+                        "/identidade/avatares/interna/**",
                         "/identidade/sessoes/interna",
                         "/identidade/cadastros/interna",
                         "/identidade/cadastros/interna/**",
@@ -114,14 +115,13 @@ public class SegurancaConfiguracao {
                                 REENVIO_REGISTRO_DISPOSITIVO_MATCHER
                         ).permitAll()
                         .requestMatchers("/api/publica/atestacoes/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/identidade/avatares/publicos/**").permitAll()
                         .requestMatchers("/api/publica/cadastros/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/publica/convites/*").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/publica/convites/*/cadastros").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/publica/sessoes").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/publica/sessoes/sociais").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/publica/sessoes/refresh").permitAll()
-                        .requestMatchers(HttpMethod.DELETE, "/api/publica/sessoes/contextos-sociais-pendentes/*")
-                        .permitAll()
                         .requestMatchers("/api/publica/recuperacoes-senha/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/identidade/vinculos-sociais")
                         .hasAnyAuthority("SCOPE_vinculos:ler", "ROLE_cliente")

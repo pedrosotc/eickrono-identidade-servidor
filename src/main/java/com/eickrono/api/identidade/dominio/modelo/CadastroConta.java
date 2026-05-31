@@ -140,15 +140,6 @@ public class CadastroConta {
     @Column(name = "exige_validacao_telefone_snapshot", nullable = false)
     private boolean exigeValidacaoTelefoneSnapshot;
 
-    @Column(name = "vinculo_social_pendente_provedor", length = 32)
-    private String vinculoSocialPendenteProvedor;
-
-    @Column(name = "vinculo_social_pendente_identificador_externo", length = 255)
-    private String vinculoSocialPendenteIdentificadorExterno;
-
-    @Column(name = "vinculo_social_pendente_nome_usuario_externo", length = 255)
-    private String vinculoSocialPendenteNomeUsuarioExterno;
-
     @Column(name = "convite_organizacional_codigo", length = 128)
     private String conviteOrganizacionalCodigo;
 
@@ -423,18 +414,6 @@ public class CadastroConta {
         return exigeValidacaoTelefoneSnapshot;
     }
 
-    public String getVinculoSocialPendenteProvedor() {
-        return vinculoSocialPendenteProvedor;
-    }
-
-    public String getVinculoSocialPendenteIdentificadorExterno() {
-        return vinculoSocialPendenteIdentificadorExterno;
-    }
-
-    public String getVinculoSocialPendenteNomeUsuarioExterno() {
-        return vinculoSocialPendenteNomeUsuarioExterno;
-    }
-
     public String getConviteOrganizacionalCodigo() {
         return conviteOrganizacionalCodigo;
     }
@@ -551,30 +530,6 @@ public class CadastroConta {
                                              final OffsetDateTime atualizadoEm) {
         this.pessoaIdPerfil = pessoaIdPerfil;
         this.perfilSistemaId = perfilSistemaId;
-        this.atualizadoEm = Objects.requireNonNull(atualizadoEm, "atualizadoEm é obrigatório");
-    }
-
-    public boolean possuiVinculoSocialPendente() {
-        return vinculoSocialPendenteProvedor != null && !vinculoSocialPendenteProvedor.isBlank()
-                && vinculoSocialPendenteIdentificadorExterno != null
-                && !vinculoSocialPendenteIdentificadorExterno.isBlank();
-    }
-
-    public void definirVinculoSocialPendente(final ProvedorVinculoSocial provedor,
-                                             final String identificadorExterno,
-                                             final String nomeUsuarioExterno,
-                                             final OffsetDateTime atualizadoEm) {
-        this.vinculoSocialPendenteProvedor = Objects.requireNonNull(provedor, "provedor é obrigatório").getAliasApi();
-        this.vinculoSocialPendenteIdentificadorExterno = Objects.requireNonNull(
-                identificadorExterno, "identificadorExterno é obrigatório");
-        this.vinculoSocialPendenteNomeUsuarioExterno = nomeUsuarioExterno;
-        this.atualizadoEm = Objects.requireNonNull(atualizadoEm, "atualizadoEm é obrigatório");
-    }
-
-    public void limparVinculoSocialPendente(final OffsetDateTime atualizadoEm) {
-        this.vinculoSocialPendenteProvedor = null;
-        this.vinculoSocialPendenteIdentificadorExterno = null;
-        this.vinculoSocialPendenteNomeUsuarioExterno = null;
         this.atualizadoEm = Objects.requireNonNull(atualizadoEm, "atualizadoEm é obrigatório");
     }
 

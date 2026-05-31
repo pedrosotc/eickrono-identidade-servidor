@@ -2,6 +2,7 @@ package com.eickrono.api.identidade.aplicacao.servico;
 
 import com.eickrono.api.identidade.aplicacao.excecao.EntregaEmailException;
 import com.eickrono.api.identidade.aplicacao.excecao.FluxoPublicoException;
+import com.eickrono.api.identidade.aplicacao.modelo.AvatarCadastroConfirmado;
 import com.eickrono.api.identidade.aplicacao.modelo.CadastroInternoRealizado;
 import com.eickrono.api.identidade.aplicacao.modelo.CadastroKeycloakProvisionado;
 import com.eickrono.api.identidade.aplicacao.modelo.ConfirmacaoEmailCadastroInternoRealizada;
@@ -13,11 +14,10 @@ import com.eickrono.api.identidade.aplicacao.modelo.IdentidadeFederadaKeycloak;
 import com.eickrono.api.identidade.aplicacao.modelo.ProjetoFluxoPublicoResolvido;
 import com.eickrono.api.identidade.aplicacao.modelo.ProvisionamentoPerfilSistemaRealizado;
 import com.eickrono.api.identidade.aplicacao.modelo.StatusCadastroPublico;
-import com.eickrono.api.identidade.aplicacao.modelo.VinculoSocialPendenteCadastro;
+import com.eickrono.api.identidade.aplicacao.modelo.VinculoSocialConfirmadoCadastro;
 import com.eickrono.api.identidade.dominio.modelo.CadastroConta;
 import com.eickrono.api.identidade.dominio.modelo.CanalValidacaoTelefoneCadastro;
 import com.eickrono.api.identidade.dominio.modelo.FormaAcesso;
-import com.eickrono.api.identidade.dominio.modelo.PerfilIdentidade;
 import com.eickrono.api.identidade.dominio.modelo.Pessoa;
 import com.eickrono.api.identidade.dominio.modelo.ProvedorVinculoSocial;
 import com.eickrono.api.identidade.dominio.modelo.SexoPessoaCadastro;
@@ -25,7 +25,6 @@ import com.eickrono.api.identidade.dominio.modelo.StatusConviteOrganizacional;
 import com.eickrono.api.identidade.dominio.modelo.TipoFormaAcesso;
 import com.eickrono.api.identidade.dominio.modelo.TipoPessoaCadastro;
 import com.eickrono.api.identidade.dominio.modelo.VinculoOrganizacional;
-import com.eickrono.api.identidade.dominio.modelo.VinculoSocial;
 import com.eickrono.api.identidade.dominio.repositorio.CadastroContaRepositorio;
 import com.eickrono.api.identidade.dominio.repositorio.ConviteOrganizacionalRepositorio;
 import com.eickrono.api.identidade.dominio.repositorio.FormaAcessoRepositorio;
@@ -33,7 +32,6 @@ import com.eickrono.api.identidade.dominio.repositorio.PerfilIdentidadeRepositor
 import com.eickrono.api.identidade.dominio.repositorio.PessoaRepositorio;
 import com.eickrono.api.identidade.dominio.repositorio.RecuperacaoSenhaRepositorio;
 import com.eickrono.api.identidade.dominio.repositorio.VinculoOrganizacionalRepositorio;
-import com.eickrono.api.identidade.dominio.repositorio.VinculoSocialRepositorio;
 import com.eickrono.api.identidade.infraestrutura.configuracao.DispositivoProperties;
 import jakarta.transaction.Transactional;
 import java.nio.charset.StandardCharsets;
@@ -69,10 +67,6 @@ public class CadastroContaInternaServico {
     private final CadastroContaRepositorio cadastroContaRepositorio;
     private final ClienteContextoPessoaPerfilSistema clienteContextoPessoaPerfilSistema;
     private final ClienteAdministracaoCadastroKeycloak clienteAdministracaoCadastroKeycloak;
-    private final PessoaRepositorio pessoaRepositorio;
-    private final PerfilIdentidadeRepositorio perfilIdentidadeRepositorio;
-    private final FormaAcessoRepositorio formaAcessoRepositorio;
-    private final VinculoSocialRepositorio vinculoSocialRepositorio;
     private final ConviteOrganizacionalRepositorio conviteOrganizacionalRepositorio;
     private final VinculoOrganizacionalRepositorio vinculoOrganizacionalRepositorio;
     private final ProvisionadorPerfilSistemaServico provisionadorPerfilSistemaServico;
@@ -84,9 +78,11 @@ public class CadastroContaInternaServico {
     private final Clock clock;
     private final SincronizacaoModeloMultiappService sincronizacaoModeloMultiappService;
     private final AuditoriaService auditoriaService;
-    private final ContextoSocialPendenteJdbc contextoSocialPendenteJdbc;
     private final ResolvedorContextoFluxoPublico resolvedorContextoFluxoPublico;
     private final ResolvedorProjetoFluxoPublico resolvedorProjetoFluxoPublico;
+    private final CadastroVinculoSocialConfirmadoJdbc cadastroVinculoSocialConfirmadoJdbc;
+    private final CadastroAvatarConfirmadoJdbc cadastroAvatarConfirmadoJdbc;
+    private final AvatarSocialProjetoJdbc avatarSocialProjetoJdbc;
     private final boolean tolerarFalhaDisponibilidadeCentralUsuario;
     private ProvisionamentoIdentidadeService provisionamentoIdentidadeServiceCompat;
     private final HexFormat hexFormat = HexFormat.of();
@@ -98,7 +94,6 @@ public class CadastroContaInternaServico {
                                        final PessoaRepositorio pessoaRepositorio,
                                        final PerfilIdentidadeRepositorio perfilIdentidadeRepositorio,
                                        final FormaAcessoRepositorio formaAcessoRepositorio,
-                                       final VinculoSocialRepositorio vinculoSocialRepositorio,
                                        final ConviteOrganizacionalRepositorio conviteOrganizacionalRepositorio,
                                        final VinculoOrganizacionalRepositorio vinculoOrganizacionalRepositorio,
                                        final ProvisionadorPerfilSistemaServico provisionadorPerfilSistemaServico,
@@ -111,9 +106,11 @@ public class CadastroContaInternaServico {
                                        final Clock clock,
                                        final SincronizacaoModeloMultiappService sincronizacaoModeloMultiappService,
                                        final AuditoriaService auditoriaService,
-                                       final ContextoSocialPendenteJdbc contextoSocialPendenteJdbc,
                                        final ResolvedorContextoFluxoPublico resolvedorContextoFluxoPublico,
                                        final ResolvedorProjetoFluxoPublico resolvedorProjetoFluxoPublico,
+                                       final CadastroVinculoSocialConfirmadoJdbc cadastroVinculoSocialConfirmadoJdbc,
+                                       final CadastroAvatarConfirmadoJdbc cadastroAvatarConfirmadoJdbc,
+                                       final AvatarSocialProjetoJdbc avatarSocialProjetoJdbc,
                                        @Value("${identidade.cadastro.tolerar-falha-disponibilidade-central:false}")
                                        final boolean tolerarFalhaDisponibilidadeCentralUsuario) {
         this(
@@ -123,7 +120,6 @@ public class CadastroContaInternaServico {
                 pessoaRepositorio,
                 perfilIdentidadeRepositorio,
                 formaAcessoRepositorio,
-                vinculoSocialRepositorio,
                 conviteOrganizacionalRepositorio,
                 vinculoOrganizacionalRepositorio,
                 provisionadorPerfilSistemaServico,
@@ -136,9 +132,11 @@ public class CadastroContaInternaServico {
                 clock,
                 sincronizacaoModeloMultiappService,
                 auditoriaService,
-                contextoSocialPendenteJdbc,
                 resolvedorContextoFluxoPublico,
                 resolvedorProjetoFluxoPublico,
+                cadastroVinculoSocialConfirmadoJdbc,
+                cadastroAvatarConfirmadoJdbc,
+                avatarSocialProjetoJdbc,
                 tolerarFalhaDisponibilidadeCentralUsuario,
                 true
         );
@@ -150,7 +148,6 @@ public class CadastroContaInternaServico {
                                        final PessoaRepositorio pessoaRepositorio,
                                        final PerfilIdentidadeRepositorio perfilIdentidadeRepositorio,
                                        final FormaAcessoRepositorio formaAcessoRepositorio,
-                                       final VinculoSocialRepositorio vinculoSocialRepositorio,
                                        final ConviteOrganizacionalRepositorio conviteOrganizacionalRepositorio,
                                        final VinculoOrganizacionalRepositorio vinculoOrganizacionalRepositorio,
                                        final ProvisionadorPerfilSistemaServico provisionadorPerfilSistemaServico,
@@ -172,7 +169,6 @@ public class CadastroContaInternaServico {
                 pessoaRepositorio,
                 perfilIdentidadeRepositorio,
                 formaAcessoRepositorio,
-                vinculoSocialRepositorio,
                 conviteOrganizacionalRepositorio,
                 vinculoOrganizacionalRepositorio,
                 provisionadorPerfilSistemaServico,
@@ -185,59 +181,11 @@ public class CadastroContaInternaServico {
                 clock,
                 sincronizacaoModeloMultiappService,
                 auditoriaService,
+                resolvedorContextoFluxoPublico,
+                resolvedorProjetoFluxoPublico,
                 null,
-                resolvedorContextoFluxoPublico,
-                resolvedorProjetoFluxoPublico,
-                false,
-                true
-        );
-    }
-
-    public CadastroContaInternaServico(final CadastroContaRepositorio cadastroContaRepositorio,
-                                       final ClienteContextoPessoaPerfilSistema clienteContextoPessoaPerfilSistema,
-                                       final ClienteAdministracaoCadastroKeycloak clienteAdministracaoCadastroKeycloak,
-                                       final PessoaRepositorio pessoaRepositorio,
-                                       final PerfilIdentidadeRepositorio perfilIdentidadeRepositorio,
-                                       final FormaAcessoRepositorio formaAcessoRepositorio,
-                                       final VinculoSocialRepositorio vinculoSocialRepositorio,
-                                       final ConviteOrganizacionalRepositorio conviteOrganizacionalRepositorio,
-                                       final VinculoOrganizacionalRepositorio vinculoOrganizacionalRepositorio,
-                                       final ProvisionadorPerfilSistemaServico provisionadorPerfilSistemaServico,
-                                       final ConsultadorDisponibilidadeUsuarioSistemaServico consultadorDisponibilidadeUsuarioSistemaServico,
-                                       final ProvisionamentoIdentidadeService provisionamentoIdentidadeService,
-                                       final CanalEnvioCodigoCadastroEmail canalEnvioCodigoCadastroEmail,
-                                       final CanalEnvioCodigoCadastroTelefone canalEnvioCodigoCadastroTelefone,
-                                       final CanalNotificacaoTentativaCadastroEmail canalNotificacaoTentativaCadastroEmail,
-                                       final DispositivoProperties dispositivoProperties,
-                                       final Clock clock,
-                                       final SincronizacaoModeloMultiappService sincronizacaoModeloMultiappService,
-                                       final AuditoriaService auditoriaService,
-                                       final ContextoSocialPendenteJdbc contextoSocialPendenteJdbc,
-                                       final ResolvedorContextoFluxoPublico resolvedorContextoFluxoPublico,
-                                       final ResolvedorProjetoFluxoPublico resolvedorProjetoFluxoPublico) {
-        this(
-                cadastroContaRepositorio,
-                clienteContextoPessoaPerfilSistema,
-                clienteAdministracaoCadastroKeycloak,
-                pessoaRepositorio,
-                perfilIdentidadeRepositorio,
-                formaAcessoRepositorio,
-                vinculoSocialRepositorio,
-                conviteOrganizacionalRepositorio,
-                vinculoOrganizacionalRepositorio,
-                provisionadorPerfilSistemaServico,
-                consultadorDisponibilidadeUsuarioSistemaServico,
-                provisionamentoIdentidadeService,
-                canalEnvioCodigoCadastroEmail,
-                canalEnvioCodigoCadastroTelefone,
-                canalNotificacaoTentativaCadastroEmail,
-                dispositivoProperties,
-                clock,
-                sincronizacaoModeloMultiappService,
-                auditoriaService,
-                contextoSocialPendenteJdbc,
-                resolvedorContextoFluxoPublico,
-                resolvedorProjetoFluxoPublico,
+                null,
+                null,
                 false,
                 true
         );
@@ -265,7 +213,6 @@ public class CadastroContaInternaServico {
                 null,
                 null,
                 null,
-                null,
                 provisionamentoIdentidadeService,
                 canalEnvioCodigoCadastroEmail,
                 canalEnvioCodigoCadastroTelefone,
@@ -275,9 +222,11 @@ public class CadastroContaInternaServico {
                 clock,
                 null,
                 null,
-                null,
                 new ResolvedorContextoFluxoPublico(cadastroContaRepositorio, recuperacaoSenhaRepositorio),
                 aplicacaoId -> new ProjetoFluxoPublicoResolvido(0L, aplicacaoId, aplicacaoId, null, null, null, true),
+                null,
+                null,
+                null,
                 false,
                 false
         );
@@ -290,7 +239,6 @@ public class CadastroContaInternaServico {
                                        final PessoaRepositorio pessoaRepositorio,
                                        final PerfilIdentidadeRepositorio perfilIdentidadeRepositorio,
                                        final FormaAcessoRepositorio formaAcessoRepositorio,
-                                       final VinculoSocialRepositorio vinculoSocialRepositorio,
                                        final ConviteOrganizacionalRepositorio conviteOrganizacionalRepositorio,
                                        final VinculoOrganizacionalRepositorio vinculoOrganizacionalRepositorio,
                                        final ProvisionadorPerfilSistemaServico provisionadorPerfilSistemaServico,
@@ -309,7 +257,6 @@ public class CadastroContaInternaServico {
                 pessoaRepositorio,
                 perfilIdentidadeRepositorio,
                 formaAcessoRepositorio,
-                vinculoSocialRepositorio,
                 conviteOrganizacionalRepositorio,
                 vinculoOrganizacionalRepositorio,
                 provisionadorPerfilSistemaServico,
@@ -332,7 +279,6 @@ public class CadastroContaInternaServico {
                                        final PessoaRepositorio pessoaRepositorio,
                                        final PerfilIdentidadeRepositorio perfilIdentidadeRepositorio,
                                        final FormaAcessoRepositorio formaAcessoRepositorio,
-                                       final VinculoSocialRepositorio vinculoSocialRepositorio,
                                        final ConviteOrganizacionalRepositorio conviteOrganizacionalRepositorio,
                                        final VinculoOrganizacionalRepositorio vinculoOrganizacionalRepositorio,
                                        final ProvisionadorPerfilSistemaServico provisionadorPerfilSistemaServico,
@@ -352,7 +298,6 @@ public class CadastroContaInternaServico {
                 pessoaRepositorio,
                 perfilIdentidadeRepositorio,
                 formaAcessoRepositorio,
-                vinculoSocialRepositorio,
                 conviteOrganizacionalRepositorio,
                 vinculoOrganizacionalRepositorio,
                 provisionadorPerfilSistemaServico,
@@ -365,9 +310,11 @@ public class CadastroContaInternaServico {
                 clock,
                 sincronizacaoModeloMultiappService,
                 auditoriaService,
-                null,
                 new ResolvedorContextoFluxoPublico(cadastroContaRepositorio, recuperacaoSenhaRepositorio),
                 aplicacaoId -> new ProjetoFluxoPublicoResolvido(0L, aplicacaoId, aplicacaoId, null, null, null, true),
+                null,
+                null,
+                null,
                 false,
                 true
         );
@@ -379,7 +326,6 @@ public class CadastroContaInternaServico {
                                         final PessoaRepositorio pessoaRepositorio,
                                         final PerfilIdentidadeRepositorio perfilIdentidadeRepositorio,
                                         final FormaAcessoRepositorio formaAcessoRepositorio,
-                                        final VinculoSocialRepositorio vinculoSocialRepositorio,
                                         final ConviteOrganizacionalRepositorio conviteOrganizacionalRepositorio,
                                         final VinculoOrganizacionalRepositorio vinculoOrganizacionalRepositorio,
                                         final ProvisionadorPerfilSistemaServico provisionadorPerfilSistemaServico,
@@ -392,9 +338,11 @@ public class CadastroContaInternaServico {
                                         final Clock clock,
                                         final SincronizacaoModeloMultiappService sincronizacaoModeloMultiappService,
                                         final AuditoriaService auditoriaService,
-                                        final ContextoSocialPendenteJdbc contextoSocialPendenteJdbc,
                                         final ResolvedorContextoFluxoPublico resolvedorContextoFluxoPublico,
                                         final ResolvedorProjetoFluxoPublico resolvedorProjetoFluxoPublico,
+                                        final CadastroVinculoSocialConfirmadoJdbc cadastroVinculoSocialConfirmadoJdbc,
+                                        final CadastroAvatarConfirmadoJdbc cadastroAvatarConfirmadoJdbc,
+                                        final AvatarSocialProjetoJdbc avatarSocialProjetoJdbc,
                                         final boolean tolerarFalhaDisponibilidadeCentralUsuario,
                                         final boolean exigirProvisionadorPerfil) {
         this.cadastroContaRepositorio = Objects.requireNonNull(cadastroContaRepositorio, "cadastroContaRepositorio é obrigatório");
@@ -402,10 +350,6 @@ public class CadastroContaInternaServico {
                 clienteContextoPessoaPerfilSistema, "clienteContextoPessoaPerfilSistema é obrigatório");
         this.clienteAdministracaoCadastroKeycloak = Objects.requireNonNull(
                 clienteAdministracaoCadastroKeycloak, "clienteAdministracaoCadastroKeycloak é obrigatório");
-        this.pessoaRepositorio = pessoaRepositorio;
-        this.perfilIdentidadeRepositorio = perfilIdentidadeRepositorio;
-        this.formaAcessoRepositorio = formaAcessoRepositorio;
-        this.vinculoSocialRepositorio = vinculoSocialRepositorio;
         this.conviteOrganizacionalRepositorio = conviteOrganizacionalRepositorio;
         this.vinculoOrganizacionalRepositorio = vinculoOrganizacionalRepositorio;
         if (exigirProvisionadorPerfil) {
@@ -429,11 +373,13 @@ public class CadastroContaInternaServico {
         this.clock = Objects.requireNonNull(clock, "clock é obrigatório");
         this.sincronizacaoModeloMultiappService = sincronizacaoModeloMultiappService;
         this.auditoriaService = auditoriaService;
-        this.contextoSocialPendenteJdbc = contextoSocialPendenteJdbc;
         this.resolvedorContextoFluxoPublico = Objects.requireNonNull(
                 resolvedorContextoFluxoPublico, "resolvedorContextoFluxoPublico e obrigatorio");
         this.resolvedorProjetoFluxoPublico = Objects.requireNonNull(
                 resolvedorProjetoFluxoPublico, "resolvedorProjetoFluxoPublico e obrigatorio");
+        this.cadastroVinculoSocialConfirmadoJdbc = cadastroVinculoSocialConfirmadoJdbc;
+        this.cadastroAvatarConfirmadoJdbc = cadastroAvatarConfirmadoJdbc;
+        this.avatarSocialProjetoJdbc = avatarSocialProjetoJdbc;
         this.tolerarFalhaDisponibilidadeCentralUsuario = tolerarFalhaDisponibilidadeCentralUsuario;
         this.provisionamentoIdentidadeServiceCompat = provisionamentoIdentidadeServiceCompat;
     }
@@ -460,11 +406,12 @@ public class CadastroContaInternaServico {
                 senhaPura,
                 null,
                 null,
-                null,
                 sistemaSolicitante,
                 ipSolicitante,
                 userAgentSolicitante,
-                null
+                null,
+                List.of(),
+                List.of()
         );
     }
 
@@ -514,43 +461,6 @@ public class CadastroContaInternaServico {
                                                      final String telefonePrincipal,
                                                      final CanalValidacaoTelefoneCadastro tipoValidacaoTelefone,
                                                      final String senhaPura,
-                                                     final VinculoSocialPendenteCadastro vinculoSocialPendente,
-                                                     final String sistemaSolicitante,
-                                                     final String ipSolicitante,
-                                                     final String userAgentSolicitante) {
-        return cadastrarPublico(
-                tipoPessoa,
-                nomeCompleto,
-                nomeFantasia,
-                usuario,
-                sexo,
-                paisNascimento,
-                dataNascimento,
-                emailPrincipal,
-                telefonePrincipal,
-                tipoValidacaoTelefone,
-                senhaPura,
-                vinculoSocialPendente,
-                sistemaSolicitante,
-                sistemaSolicitante,
-                ipSolicitante,
-                userAgentSolicitante,
-                null
-        );
-    }
-
-    public CadastroInternoRealizado cadastrarPublico(final TipoPessoaCadastro tipoPessoa,
-                                                     final String nomeCompleto,
-                                                     final String nomeFantasia,
-                                                     final String usuario,
-                                                     final SexoPessoaCadastro sexo,
-                                                     final String paisNascimento,
-                                                     final LocalDate dataNascimento,
-                                                     final String emailPrincipal,
-                                                     final String telefonePrincipal,
-                                                     final CanalValidacaoTelefoneCadastro tipoValidacaoTelefone,
-                                                     final String senhaPura,
-                                                     final VinculoSocialPendenteCadastro vinculoSocialPendente,
                                                      final String sistemaSolicitante,
                                                      final String ipSolicitante,
                                                      final String userAgentSolicitante,
@@ -567,7 +477,6 @@ public class CadastroContaInternaServico {
                 telefonePrincipal,
                 tipoValidacaoTelefone,
                 senhaPura,
-                vinculoSocialPendente,
                 sistemaSolicitante,
                 sistemaSolicitante,
                 ipSolicitante,
@@ -587,7 +496,6 @@ public class CadastroContaInternaServico {
                                                      final String telefonePrincipal,
                                                      final CanalValidacaoTelefoneCadastro tipoValidacaoTelefone,
                                                      final String senhaPura,
-                                                     final VinculoSocialPendenteCadastro vinculoSocialPendente,
                                                      final String aplicacaoId,
                                                      final String sistemaSolicitante,
                                                      final String ipSolicitante,
@@ -605,7 +513,6 @@ public class CadastroContaInternaServico {
                 telefonePrincipal,
                 tipoValidacaoTelefone,
                 senhaPura,
-                vinculoSocialPendente,
                 null,
                 aplicacaoId,
                 sistemaSolicitante,
@@ -626,7 +533,6 @@ public class CadastroContaInternaServico {
                                                      final String telefonePrincipal,
                                                      final CanalValidacaoTelefoneCadastro tipoValidacaoTelefone,
                                                      final String senhaPura,
-                                                     final VinculoSocialPendenteCadastro vinculoSocialPendente,
                                                      final String aplicacaoId,
                                                      final String sistemaSolicitante,
                                                      final String ipSolicitante,
@@ -643,7 +549,6 @@ public class CadastroContaInternaServico {
                 telefonePrincipal,
                 tipoValidacaoTelefone,
                 senhaPura,
-                vinculoSocialPendente,
                 null,
                 aplicacaoId,
                 sistemaSolicitante,
@@ -664,7 +569,6 @@ public class CadastroContaInternaServico {
                                                      final String telefonePrincipal,
                                                      final CanalValidacaoTelefoneCadastro tipoValidacaoTelefone,
                                                      final String senhaPura,
-                                                     final VinculoSocialPendenteCadastro vinculoSocialPendente,
                                                      final ConviteOrganizacionalValidado conviteOrganizacional,
                                                      final String sistemaSolicitante,
                                                      final String ipSolicitante,
@@ -681,7 +585,6 @@ public class CadastroContaInternaServico {
                 telefonePrincipal,
                 tipoValidacaoTelefone,
                 senhaPura,
-                vinculoSocialPendente,
                 conviteOrganizacional,
                 sistemaSolicitante,
                 sistemaSolicitante,
@@ -702,7 +605,6 @@ public class CadastroContaInternaServico {
                                                      final String telefonePrincipal,
                                                      final CanalValidacaoTelefoneCadastro tipoValidacaoTelefone,
                                                      final String senhaPura,
-                                                     final VinculoSocialPendenteCadastro vinculoSocialPendente,
                                                      final ConviteOrganizacionalValidado conviteOrganizacional,
                                                      final String sistemaSolicitante,
                                                      final String ipSolicitante,
@@ -720,7 +622,6 @@ public class CadastroContaInternaServico {
                 telefonePrincipal,
                 tipoValidacaoTelefone,
                 senhaPura,
-                vinculoSocialPendente,
                 conviteOrganizacional,
                 sistemaSolicitante,
                 sistemaSolicitante,
@@ -741,7 +642,6 @@ public class CadastroContaInternaServico {
                                                      final String telefonePrincipal,
                                                      final CanalValidacaoTelefoneCadastro tipoValidacaoTelefone,
                                                      final String senhaPura,
-                                                     final VinculoSocialPendenteCadastro vinculoSocialPendente,
                                                      final ConviteOrganizacionalValidado conviteOrganizacional,
                                                      final String aplicacaoId,
                                                      final String sistemaSolicitante,
@@ -759,7 +659,6 @@ public class CadastroContaInternaServico {
                 telefonePrincipal,
                 tipoValidacaoTelefone,
                 senhaPura,
-                vinculoSocialPendente,
                 conviteOrganizacional,
                 aplicacaoId,
                 sistemaSolicitante,
@@ -780,13 +679,94 @@ public class CadastroContaInternaServico {
                                                      final String telefonePrincipal,
                                                      final CanalValidacaoTelefoneCadastro tipoValidacaoTelefone,
                                                      final String senhaPura,
-                                                     final VinculoSocialPendenteCadastro vinculoSocialPendente,
                                                      final ConviteOrganizacionalValidado conviteOrganizacional,
                                                      final String aplicacaoId,
                                                      final String sistemaSolicitante,
                                                      final String ipSolicitante,
                                                      final String userAgentSolicitante,
                                                      final ContextoSolicitacaoFluxoPublico contextoSolicitacao) {
+        return cadastrarPublico(
+                tipoPessoa,
+                nomeCompleto,
+                nomeFantasia,
+                usuario,
+                sexo,
+                paisNascimento,
+                dataNascimento,
+                emailPrincipal,
+                telefonePrincipal,
+                tipoValidacaoTelefone,
+                senhaPura,
+                conviteOrganizacional,
+                aplicacaoId,
+                sistemaSolicitante,
+                ipSolicitante,
+                userAgentSolicitante,
+                contextoSolicitacao,
+                List.of()
+        );
+    }
+
+    public CadastroInternoRealizado cadastrarPublico(final TipoPessoaCadastro tipoPessoa,
+                                                     final String nomeCompleto,
+                                                     final String nomeFantasia,
+                                                     final String usuario,
+                                                     final SexoPessoaCadastro sexo,
+                                                     final String paisNascimento,
+                                                     final LocalDate dataNascimento,
+                                                     final String emailPrincipal,
+                                                     final String telefonePrincipal,
+                                                     final CanalValidacaoTelefoneCadastro tipoValidacaoTelefone,
+                                                     final String senhaPura,
+                                                     final ConviteOrganizacionalValidado conviteOrganizacional,
+                                                     final String aplicacaoId,
+                                                     final String sistemaSolicitante,
+                                                     final String ipSolicitante,
+                                                     final String userAgentSolicitante,
+                                                     final ContextoSolicitacaoFluxoPublico contextoSolicitacao,
+                                                     final List<AvatarCadastroConfirmado> avataresConfirmados) {
+        return cadastrarPublico(
+                tipoPessoa,
+                nomeCompleto,
+                nomeFantasia,
+                usuario,
+                sexo,
+                paisNascimento,
+                dataNascimento,
+                emailPrincipal,
+                telefonePrincipal,
+                tipoValidacaoTelefone,
+                senhaPura,
+                conviteOrganizacional,
+                aplicacaoId,
+                sistemaSolicitante,
+                ipSolicitante,
+                userAgentSolicitante,
+                contextoSolicitacao,
+                List.of(),
+                avataresConfirmados
+        );
+    }
+
+    public CadastroInternoRealizado cadastrarPublico(final TipoPessoaCadastro tipoPessoa,
+                                                     final String nomeCompleto,
+                                                     final String nomeFantasia,
+                                                     final String usuario,
+                                                     final SexoPessoaCadastro sexo,
+                                                     final String paisNascimento,
+                                                     final LocalDate dataNascimento,
+                                                     final String emailPrincipal,
+                                                     final String telefonePrincipal,
+                                                     final CanalValidacaoTelefoneCadastro tipoValidacaoTelefone,
+                                                     final String senhaPura,
+                                                     final ConviteOrganizacionalValidado conviteOrganizacional,
+                                                     final String aplicacaoId,
+                                                     final String sistemaSolicitante,
+                                                     final String ipSolicitante,
+                                                     final String userAgentSolicitante,
+                                                     final ContextoSolicitacaoFluxoPublico contextoSolicitacao,
+                                                     final List<VinculoSocialConfirmadoCadastro> vinculosSociaisConfirmados,
+                                                     final List<AvatarCadastroConfirmado> avataresConfirmados) {
         return cadastrarCompleto(
                 Objects.requireNonNull(tipoPessoa, "tipoPessoa é obrigatório"),
                 nomeCompleto,
@@ -799,13 +779,14 @@ public class CadastroContaInternaServico {
                 telefonePrincipal,
                 tipoValidacaoTelefone,
                 senhaPura,
-                vinculoSocialPendente,
                 conviteOrganizacional,
                 aplicacaoId,
                 sistemaSolicitante,
                 ipSolicitante,
                 userAgentSolicitante,
-                contextoSolicitacao
+                contextoSolicitacao,
+                vinculosSociaisConfirmados,
+                avataresConfirmados
         );
     }
 
@@ -1045,6 +1026,196 @@ public class CadastroContaInternaServico {
         return removidos;
     }
 
+    private static List<VinculoSocialConfirmadoCadastro> validarVinculosSociaisConfirmados(
+            final List<VinculoSocialConfirmadoCadastro> vinculosSociaisConfirmados) {
+        if (vinculosSociaisConfirmados == null || vinculosSociaisConfirmados.isEmpty()) {
+            return List.of();
+        }
+        return vinculosSociaisConfirmados.stream()
+                .filter(Objects::nonNull)
+                .toList();
+    }
+
+    private static List<AvatarCadastroConfirmado> validarAvataresConfirmados(
+            final List<AvatarCadastroConfirmado> avataresConfirmados) {
+        if (avataresConfirmados == null || avataresConfirmados.isEmpty()) {
+            return List.of();
+        }
+        return avataresConfirmados.stream()
+                .filter(Objects::nonNull)
+                .toList();
+    }
+
+    private static void validarPreferenciaAvatarUnica(
+            final List<VinculoSocialConfirmadoCadastro> vinculosSociaisConfirmados,
+            final List<AvatarCadastroConfirmado> avataresConfirmados) {
+        long preferidosSociais = vinculosSociaisConfirmados.stream()
+                .filter(VinculoSocialConfirmadoCadastro::avatarPreferido)
+                .count();
+        long preferidosAvatares = avataresConfirmados.stream()
+                .filter(AvatarCadastroConfirmado::preferido)
+                .count();
+        if (preferidosSociais + preferidosAvatares > 1) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Apenas uma opção de avatar confirmada pode ser preferida."
+            );
+        }
+    }
+
+    private void registrarVinculosSociaisConfirmadosDoCadastro(
+            final CadastroConta cadastroConta,
+            final List<VinculoSocialConfirmadoCadastro> vinculosSociaisConfirmados) {
+        if (cadastroVinculoSocialConfirmadoJdbc == null
+                || cadastroConta == null
+                || vinculosSociaisConfirmados == null
+                || vinculosSociaisConfirmados.isEmpty()) {
+            return;
+        }
+        cadastroVinculoSocialConfirmadoJdbc.registrar(cadastroConta.getCadastroId(), vinculosSociaisConfirmados);
+    }
+
+    private void registrarAvataresConfirmadosDoCadastro(final CadastroConta cadastroConta,
+                                                        final List<AvatarCadastroConfirmado> avataresConfirmados) {
+        if (cadastroAvatarConfirmadoJdbc == null
+                || cadastroConta == null
+                || avataresConfirmados == null
+                || avataresConfirmados.isEmpty()) {
+            return;
+        }
+        cadastroAvatarConfirmadoJdbc.registrar(cadastroConta.getCadastroId(), avataresConfirmados);
+    }
+
+    private void sincronizarAvataresConfirmadosDoCadastro(final CadastroConta cadastroConta,
+                                                          final OffsetDateTime agora) {
+        if (cadastroAvatarConfirmadoJdbc == null || cadastroConta == null) {
+            return;
+        }
+        Long clienteEcossistemaId = cadastroConta.getClienteEcossistemaId();
+        if (clienteEcossistemaId == null) {
+            ProjetoFluxoPublicoResolvido projeto = resolvedorProjetoFluxoPublico
+                    .resolverAtivo(cadastroConta.getSistemaSolicitante());
+            clienteEcossistemaId = projeto == null ? null : projeto.clienteEcossistemaId();
+        }
+        if (clienteEcossistemaId == null) {
+            return;
+        }
+        cadastroAvatarConfirmadoJdbc.consumirParaUsuario(
+                cadastroConta.getCadastroId(),
+                cadastroConta.getSubjectRemoto(),
+                clienteEcossistemaId,
+                agora
+        );
+    }
+
+    private void sincronizarVinculosSociaisConfirmadosDoCadastro(final CadastroConta cadastroConta,
+                                                                 final Pessoa pessoa,
+                                                                 final OffsetDateTime agora) {
+        if (cadastroVinculoSocialConfirmadoJdbc == null || cadastroConta == null || pessoa == null) {
+            return;
+        }
+        List<VinculoSocialConfirmadoCadastro> vinculos =
+                cadastroVinculoSocialConfirmadoJdbc.listarAtivos(cadastroConta.getCadastroId());
+        if (vinculos.isEmpty()) {
+            return;
+        }
+        List<IdentidadeFederadaKeycloak> identidades = vinculos.stream()
+                .map(this::converterVinculoSocialConfirmado)
+                .toList();
+        for (IdentidadeFederadaKeycloak identidade : identidades) {
+            FormaAcesso formaAcesso = provisionamentoIdentidadeServiceCompat.registrarFormaAcessoSocial(
+                    pessoa,
+                    identidade.provedor().getAliasFormaAcesso(),
+                    identidade.identificadorCanonico(),
+                    agora
+            );
+            formaAcesso.atualizarDadosExternos(
+                    identidade.nomeExibicaoExterno(),
+                    identidade.urlAvatarExterno(),
+                    agora
+            );
+            clienteAdministracaoCadastroKeycloak.vincularIdentidadeFederada(
+                    cadastroConta.getSubjectRemoto(),
+                    identidade
+            );
+        }
+        Long clienteEcossistemaId = resolverClienteEcossistemaCadastro(cadastroConta);
+        if (avatarSocialProjetoJdbc != null && clienteEcossistemaId != null) {
+            avatarSocialProjetoJdbc.sincronizar(
+                    cadastroConta.getSubjectRemoto(),
+                    cadastroConta.getEmailPrincipal(),
+                    clienteEcossistemaId,
+                    agora,
+                    agora,
+                    identidades
+            );
+            vinculos.stream()
+                    .filter(VinculoSocialConfirmadoCadastro::avatarPreferido)
+                    .filter(vinculo -> normalizarOpcional(vinculo.urlAvatarExterno()) != null)
+                    .map(VinculoSocialConfirmadoCadastro::provedor)
+                    .map(ProvedorVinculoSocial::fromAlias)
+                    .flatMap(Optional::stream)
+                    .findFirst()
+                    .ifPresent(provedor -> avatarSocialProjetoJdbc.definirAvatarSocial(
+                            cadastroConta.getSubjectRemoto(),
+                            clienteEcossistemaId,
+                            provedor,
+                            agora
+                    ));
+        }
+        cadastroVinculoSocialConfirmadoJdbc.consumir(cadastroConta.getCadastroId(), agora);
+        LOGGER.info(
+                "qa_vinculo_social_cadastro_confirmado_vinculado cadastroId={} subjectRemoto={} vinculos={}",
+                cadastroConta.getCadastroId(),
+                mascararIdentificador(cadastroConta.getSubjectRemoto()),
+                identidades.size()
+        );
+    }
+
+    private Long resolverClienteEcossistemaCadastro(final CadastroConta cadastroConta) {
+        Long clienteEcossistemaId = cadastroConta.getClienteEcossistemaId();
+        if (clienteEcossistemaId != null) {
+            return clienteEcossistemaId;
+        }
+        ProjetoFluxoPublicoResolvido projeto = resolvedorProjetoFluxoPublico
+                .resolverAtivo(cadastroConta.getSistemaSolicitante());
+        return projeto == null ? null : projeto.clienteEcossistemaId();
+    }
+
+    private IdentidadeFederadaKeycloak converterVinculoSocialConfirmado(
+            final VinculoSocialConfirmadoCadastro vinculo) {
+        ProvedorVinculoSocial provedor = ProvedorVinculoSocial.fromAlias(vinculo.provedor())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Provedor social confirmado não suportado."
+                ));
+        return new IdentidadeFederadaKeycloak(
+                provedor,
+                obrigatorio(vinculo.identificadorExterno(), "identificadorExterno"),
+                normalizarOpcional(vinculo.nomeUsuarioExterno()),
+                normalizarOpcional(vinculo.nomeCompleto()),
+                normalizarOpcional(vinculo.urlAvatarExterno())
+        );
+    }
+
+    private static String mascararIdentificador(final String identificador) {
+        if (identificador == null || identificador.isBlank()) {
+            return null;
+        }
+        String valor = identificador.trim();
+        int indiceArroba = valor.indexOf('@');
+        if (indiceArroba > 0) {
+            return valor.substring(0, 1) + "***" + valor.substring(indiceArroba);
+        }
+        if (valor.length() == 1) {
+            return "*";
+        }
+        if (valor.length() == 2) {
+            return valor.substring(0, 1) + "*";
+        }
+        return valor.substring(0, 1) + "***" + valor.substring(valor.length() - 1);
+    }
+
     private CadastroInternoRealizado cadastrarCompleto(final TipoPessoaCadastro tipoPessoa,
                                                        final String nomeCompleto,
                                                        final String nomeFantasia,
@@ -1056,13 +1227,14 @@ public class CadastroContaInternaServico {
                                                        final String telefonePrincipal,
                                                        final CanalValidacaoTelefoneCadastro tipoValidacaoTelefone,
                                                        final String senhaPura,
-                                                       final VinculoSocialPendenteCadastro vinculoSocialPendente,
                                                        final ConviteOrganizacionalValidado conviteOrganizacional,
                                                        final String aplicacaoId,
                                                        final String sistemaSolicitante,
                                                        final String ipSolicitante,
                                                        final String userAgentSolicitante,
-                                                       final ContextoSolicitacaoFluxoPublico contextoSolicitacao) {
+                                                       final ContextoSolicitacaoFluxoPublico contextoSolicitacao,
+                                                       final List<VinculoSocialConfirmadoCadastro> vinculosSociaisConfirmados,
+                                                       final List<AvatarCadastroConfirmado> avataresConfirmados) {
         String nomeNormalizado = obrigatorio(nomeCompleto, "nomeCompleto");
         String emailNormalizado = obrigatorio(emailPrincipal, "emailPrincipal").toLowerCase(Locale.ROOT);
         String telefoneNormalizado = normalizarOpcional(telefonePrincipal);
@@ -1087,6 +1259,11 @@ public class CadastroContaInternaServico {
         if (projeto != null) {
             contextoResolvido = contextoResolvido.mesclarFaltantes(projeto.comoContextoPadrao());
         }
+        List<VinculoSocialConfirmadoCadastro> vinculosSociaisConfirmadosNormalizados =
+                validarVinculosSociaisConfirmados(vinculosSociaisConfirmados);
+        List<AvatarCadastroConfirmado> avataresConfirmadosNormalizados =
+                validarAvataresConfirmados(avataresConfirmados);
+        validarPreferenciaAvatarUnica(vinculosSociaisConfirmadosNormalizados, avataresConfirmadosNormalizados);
 
         validarDuplicidadeUsuario(usuarioNormalizado, sistemaNormalizado);
         validarDuplicidadeEmail(emailNormalizado);
@@ -1144,14 +1321,6 @@ public class CadastroContaInternaServico {
                     agora
             );
         }
-        if (vinculoSocialPendente != null) {
-            cadastroConta.definirVinculoSocialPendente(
-                    vinculoSocialPendente.provedor(),
-                    vinculoSocialPendente.identificadorExterno(),
-                    vinculoSocialPendente.nomeUsuarioExterno(),
-                    agora
-            );
-        }
         if (conviteOrganizacional != null) {
             cadastroConta.definirConviteOrganizacionalPendente(
                     conviteOrganizacional.codigo(),
@@ -1179,6 +1348,22 @@ public class CadastroContaInternaServico {
         }
 
         sincronizarCadastroSeConfigurado(cadastroConta);
+        try {
+            registrarVinculosSociaisConfirmadosDoCadastro(cadastroConta, vinculosSociaisConfirmadosNormalizados);
+            registrarAvataresConfirmadosDoCadastro(cadastroConta, avataresConfirmadosNormalizados);
+        } catch (RuntimeException ex) {
+            try {
+                removerCadastroPendente(cadastroConta);
+            } catch (RuntimeException cleanupException) {
+                LOGGER.warn(
+                        "Falha ao reverter cadastro pendente apos erro de social/avatar cadastroId={} subjectRemoto={}",
+                        cadastroConta.getCadastroId(),
+                        cadastroConta.getSubjectRemoto(),
+                        cleanupException
+                );
+            }
+            throw ex;
+        }
         try {
             canalEnvioCodigoCadastroEmail.enviar(cadastroConta, codigoClaro);
         } catch (EntregaEmailException ex) {
@@ -1282,8 +1467,10 @@ public class CadastroContaInternaServico {
     private ConfirmacaoEmailCadastroPublicoRealizada finalizarCadastroPublico(final CadastroConta cadastroConta,
                                                                               final OffsetDateTime agora) {
         String statusPerfilSistema = "EMAIL_CONFIRMADO";
+        Pessoa pessoaPublicaConfirmada = null;
         if (ehFluxoCadastroPublico(cadastroConta)) {
             Pessoa pessoa = confirmarPessoaCanonicaPublica(cadastroConta, agora);
+            pessoaPublicaConfirmada = pessoa;
             ProvisionamentoPerfilSistemaRealizado provisionamento =
                     provisionarPerfilSistemaPublico(cadastroConta, pessoa.getId());
             cadastroConta.definirProvisionamentoPerfil(
@@ -1318,18 +1505,16 @@ public class CadastroContaInternaServico {
                     .orElse(statusPerfilSistema);
         }
 
-        vincularIdentidadesSociaisPendentesDoCadastro(cadastroConta, agora);
         materializarVinculoOrganizacionalSeNecessario(cadastroConta, agora);
         clienteAdministracaoCadastroKeycloak.confirmarEmailEAtivarUsuario(
                 cadastroConta.getSubjectRemoto(),
                 cadastroConta.getNomeCompleto(),
                 cadastroConta.getDataNascimento()
         );
-        if (cadastroConta.possuiVinculoSocialPendente()) {
-            cadastroConta.limparVinculoSocialPendente(agora);
-        }
         cadastroConta.marcarContatosConfirmados(agora);
         sincronizarCadastroSeConfigurado(cadastroConta);
+        sincronizarVinculosSociaisConfirmadosDoCadastro(cadastroConta, pessoaPublicaConfirmada, agora);
+        sincronizarAvataresConfirmadosDoCadastro(cadastroConta, agora);
 
         return montarRespostaConfirmacao(cadastroConta, statusPerfilSistema);
     }
@@ -1436,10 +1621,36 @@ public class CadastroContaInternaServico {
     private void validarDuplicidadeEmail(final String emailNormalizado) {
         Optional<CadastroConta> cadastroExistente = cadastroContaRepositorio.findByEmailPrincipal(emailNormalizado);
         if (cadastroExistente.isPresent()) {
+            CadastroConta cadastro = cadastroExistente.get();
+            LOGGER.warn(
+                    "cadastro_publico_email_indisponivel_origem=cadastro_local email={} cadastroId={} status={} "
+                            + "usuario={} sistemaSolicitante={} emailConfirmado={} criadoEm={} atualizadoEm={} "
+                            + "clienteContextoClasse={}",
+                    mascararIdentificador(emailNormalizado),
+                    cadastro.getCadastroId(),
+                    cadastro.getStatus(),
+                    cadastro.getUsuario(),
+                    cadastro.getSistemaSolicitante(),
+                    cadastro.getEmailConfirmadoEm() != null,
+                    cadastro.getCriadoEm(),
+                    cadastro.getAtualizadoEm(),
+                    clienteContextoPessoaPerfilSistema.getClass().getName()
+            );
             throw criarErroEmailIndisponivel();
         }
         clienteContextoPessoaPerfilSistema.buscarPorEmail(emailNormalizado)
                 .ifPresent(contexto -> {
+                    LOGGER.warn(
+                            "cadastro_publico_email_indisponivel_origem=contexto_perfil email={} pessoaId={} sub={} "
+                                    + "usuario={} perfilSistemaId={} statusPerfilSistema={} clienteContextoClasse={}",
+                            mascararIdentificador(emailNormalizado),
+                            contexto.pessoaId(),
+                            mascararIdentificador(contexto.sub()),
+                            contexto.usuario(),
+                            contexto.perfilSistemaId(),
+                            contexto.statusPerfilSistema(),
+                            clienteContextoPessoaPerfilSistema.getClass().getName()
+                    );
                     notificarTentativaCadastroContaExistente(emailNormalizado);
                     throw criarErroEmailIndisponivel();
                 });
@@ -1450,186 +1661,6 @@ public class CadastroContaInternaServico {
                 "email_indisponivel",
                 "Já existe uma conta com o e-mail informado. Entre ou recupere a senha."
         );
-    }
-
-    private ProvedorVinculoSocial resolverProvedorVinculoSocialPendente(final CadastroConta cadastroConta) {
-        return ProvedorVinculoSocial.fromAlias(cadastroConta.getVinculoSocialPendenteProvedor())
-                .orElseThrow(() -> new IllegalStateException("Provedor social pendente inválido para o cadastro."));
-    }
-
-    private void vincularIdentidadesSociaisPendentesDoCadastro(final CadastroConta cadastroConta,
-                                                               final OffsetDateTime instante) {
-        for (IdentidadeSocialPendenteFinalizacao identidadePendente :
-                resolverIdentidadesSociaisPendentesDoCadastro(cadastroConta)) {
-            clienteAdministracaoCadastroKeycloak.vincularIdentidadeFederada(
-                    cadastroConta.getSubjectRemoto(),
-                    identidadePendente.identidadeFederada()
-            );
-            materializarVinculoSocialLocalSeNecessario(
-                    cadastroConta,
-                    identidadePendente.identidadeFederada(),
-                    instante
-            );
-            if (identidadePendente.contextoId() != null && contextoSocialPendenteJdbc != null) {
-                contextoSocialPendenteJdbc.consumir(identidadePendente.contextoId());
-            }
-        }
-    }
-
-    private List<IdentidadeSocialPendenteFinalizacao> resolverIdentidadesSociaisPendentesDoCadastro(
-            final CadastroConta cadastroConta) {
-        java.util.LinkedHashMap<String, IdentidadeSocialPendenteFinalizacao> identidades = new java.util.LinkedHashMap<>();
-
-        if (contextoSocialPendenteJdbc != null) {
-            try {
-                ProjetoFluxoPublicoResolvido projeto = resolvedorProjetoFluxoPublico
-                        .resolverAtivo(cadastroConta.getSistemaSolicitante());
-                if (projeto != null) {
-                    List<ContextoSocialPendenteJdbc.ContextoSocialPendenteCadastro> contextos =
-                            contextoSocialPendenteJdbc.listarPendentesAberturaCadastro(
-                                    projeto.clienteEcossistemaId(),
-                                    cadastroConta.getEmailPrincipal()
-                            );
-                    for (ContextoSocialPendenteJdbc.ContextoSocialPendenteCadastro contexto : contextos) {
-                        Optional<ProvedorVinculoSocial> provedor = ProvedorVinculoSocial.fromAlias(contexto.provedor());
-                        if (provedor.isEmpty()) {
-                            LOGGER.warn(
-                                    "contexto_social_pendente_ignorado_provedor_desconhecido cadastroId={} provedor={}",
-                                    cadastroConta.getCadastroId(),
-                                    contexto.provedor()
-                            );
-                            continue;
-                        }
-                        IdentidadeFederadaKeycloak identidadeFederada = new IdentidadeFederadaKeycloak(
-                                provedor.orElseThrow(),
-                                contexto.identificadorExterno(),
-                                contexto.nomeUsuarioExterno(),
-                                contexto.nomeExibicaoExterno(),
-                                contexto.urlAvatarExterno()
-                        );
-                        adicionarIdentidadeSocialPendente(
-                                identidades,
-                                identidadeFederada,
-                                contexto.id()
-                        );
-                    }
-                }
-            } catch (RuntimeException exception) {
-                LOGGER.warn(
-                        "falha_resolucao_contextos_sociais_pendentes_pos_confirmacao cadastroId={} sistema={} motivo={}",
-                        cadastroConta.getCadastroId(),
-                        cadastroConta.getSistemaSolicitante(),
-                        exception.getMessage()
-                );
-            }
-        }
-
-        if (cadastroConta.possuiVinculoSocialPendente()) {
-            adicionarIdentidadeSocialPendente(
-                    identidades,
-                    new IdentidadeFederadaKeycloak(
-                            resolverProvedorVinculoSocialPendente(cadastroConta),
-                            cadastroConta.getVinculoSocialPendenteIdentificadorExterno(),
-                            cadastroConta.getVinculoSocialPendenteNomeUsuarioExterno()
-                    ),
-                    null
-            );
-        }
-
-        return List.copyOf(identidades.values());
-    }
-
-    private void adicionarIdentidadeSocialPendente(
-            final java.util.LinkedHashMap<String, IdentidadeSocialPendenteFinalizacao> identidades,
-            final IdentidadeFederadaKeycloak identidadeFederada,
-            final UUID contextoId) {
-        String chave = identidadeFederada.provedor().getAliasApi()
-                + "::"
-                + identidadeFederada.identificadorCanonico();
-        identidades.putIfAbsent(
-                chave,
-                new IdentidadeSocialPendenteFinalizacao(identidadeFederada, contextoId)
-        );
-    }
-
-    private void materializarVinculoSocialLocalSeNecessario(final CadastroConta cadastroConta,
-                                                            final IdentidadeFederadaKeycloak identidadeFederada,
-                                                            final OffsetDateTime instante) {
-        if (pessoaRepositorio == null
-                || perfilIdentidadeRepositorio == null
-                || formaAcessoRepositorio == null
-                || vinculoSocialRepositorio == null) {
-            return;
-        }
-
-        Pessoa pessoa = pessoaRepositorio.findById(cadastroConta.getPessoaIdPerfil())
-                .orElseThrow(() -> new IllegalStateException("Pessoa não encontrada para materializar o vínculo social."));
-        PerfilIdentidade perfil = perfilIdentidadeRepositorio.findBySub(cadastroConta.getSubjectRemoto())
-                .orElseThrow(() -> new IllegalStateException("Perfil não encontrado para materializar o vínculo social."));
-
-        reconciliarFormaAcessoSocialLocal(pessoa, identidadeFederada, instante);
-        reconciliarVinculoSocialLocal(perfil, identidadeFederada, instante);
-    }
-
-    private void reconciliarFormaAcessoSocialLocal(final Pessoa pessoa,
-                                                   final IdentidadeFederadaKeycloak identidadeFederada,
-                                                   final OffsetDateTime instante) {
-        Optional<FormaAcesso> conflito = formaAcessoRepositorio.findByTipoAndProvedorAndIdentificador(
-                TipoFormaAcesso.SOCIAL,
-                identidadeFederada.provedor().getAliasFormaAcesso(),
-                identidadeFederada.identificadorCanonico()
-        );
-        if (conflito.isPresent() && !Objects.equals(conflito.orElseThrow().getPessoa().getId(), pessoa.getId())) {
-            throw new IllegalStateException("Forma de acesso social já vinculada a outra pessoa");
-        }
-
-        Optional<FormaAcesso> existente = formaAcessoRepositorio.findByPessoa(pessoa).stream()
-                .filter(formaAcesso -> formaAcesso.getTipo() == TipoFormaAcesso.SOCIAL)
-                .filter(formaAcesso -> Objects.equals(
-                        formaAcesso.getProvedor(),
-                        identidadeFederada.provedor().getAliasFormaAcesso()))
-                .findFirst();
-
-        if (existente.isPresent()) {
-            FormaAcesso formaAcesso = existente.orElseThrow();
-            formaAcesso.atualizarIdentificador(identidadeFederada.identificadorCanonico(), false, instante);
-            formaAcessoRepositorio.save(formaAcesso);
-            return;
-        }
-
-        formaAcessoRepositorio.save(new FormaAcesso(
-                pessoa,
-                TipoFormaAcesso.SOCIAL,
-                identidadeFederada.provedor().getAliasFormaAcesso(),
-                identidadeFederada.identificadorCanonico(),
-                false,
-                instante,
-                instante
-        ));
-    }
-
-    private void reconciliarVinculoSocialLocal(final PerfilIdentidade perfil,
-                                               final IdentidadeFederadaKeycloak identidadeFederada,
-                                               final OffsetDateTime instante) {
-        Optional<VinculoSocial> existente = vinculoSocialRepositorio.findByPerfil(perfil).stream()
-                .filter(vinculoSocial -> Objects.equals(
-                        vinculoSocial.getProvedor(),
-                        identidadeFederada.provedor().getAliasApi()))
-                .findFirst();
-
-        if (existente.isPresent()) {
-            VinculoSocial vinculoSocial = existente.orElseThrow();
-            vinculoSocial.atualizarIdentificador(identidadeFederada.identificadorExibicao());
-            vinculoSocialRepositorio.save(vinculoSocial);
-            return;
-        }
-
-        vinculoSocialRepositorio.save(new VinculoSocial(
-                perfil,
-                identidadeFederada.provedor().getAliasApi(),
-                identidadeFederada.identificadorExibicao(),
-                instante
-        ));
     }
 
     private void materializarVinculoOrganizacionalSeNecessario(final CadastroConta cadastroConta,
@@ -1674,12 +1705,6 @@ public class CadastroContaInternaServico {
                         conviteOrganizacionalRepositorio.save(convite);
                     });
         }
-    }
-
-    private record IdentidadeSocialPendenteFinalizacao(
-            IdentidadeFederadaKeycloak identidadeFederada,
-            UUID contextoId
-    ) {
     }
 
     private void notificarTentativaCadastroContaExistente(final String emailNormalizado) {

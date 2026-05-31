@@ -20,8 +20,10 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.nullable;
 import org.mockito.Captor;
 import org.mockito.Mock;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -62,6 +64,8 @@ class RecuperacaoSenhaServiceTest {
     @Mock
     private AuditoriaService auditoriaService;
     @Mock
+    private ResolvedorContextoFluxoPublico resolvedorContextoFluxoPublico;
+    @Mock
     private ResolvedorProjetoFluxoPublico resolvedorProjetoFluxoPublico;
 
     @Captor
@@ -89,6 +93,7 @@ class RecuperacaoSenhaServiceTest {
                 tokenDispositivoService,
                 null,
                 auditoriaService,
+                resolvedorContextoFluxoPublico,
                 resolvedorProjetoFluxoPublico
         );
         when(resolvedorProjetoFluxoPublico.resolverAtivo("eickrono-thimisu-app"))
@@ -101,6 +106,15 @@ class RecuperacaoSenhaServiceTest {
                         "mobile",
                         false
                 ));
+        lenient().when(resolvedorContextoFluxoPublico.resolver(
+                anyString(),
+                nullable(ContextoSolicitacaoFluxoPublico.class)
+        )).thenAnswer(invocation -> {
+            ContextoSolicitacaoFluxoPublico contexto = invocation.getArgument(1);
+            return contexto == null
+                    ? new ContextoSolicitacaoFluxoPublico(null, null, null, null, null, null, null)
+                    : contexto;
+        });
         when(cadastroContaRepositorio.findAllByEmailPrincipal(anyString())).thenReturn(List.of());
     }
 
@@ -159,38 +173,22 @@ class RecuperacaoSenhaServiceTest {
                         true,
                         1L
                 )));
-        when(cadastroContaRepositorio.findTopByEmailPrincipalOrderByAtualizadoEmDesc("ana@eickrono.com"))
-                .thenReturn(Optional.of(new CadastroConta(
-                        java.util.UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
-                        "sub-ana",
-                        TipoPessoaCadastro.FISICA,
-                        "Ana Souza",
-                        null,
-                        "ana.souza",
-                        null,
-                        null,
-                        null,
-                        "ana@eickrono.com",
-                        "+5511999999999",
-                        CanalValidacaoTelefoneCadastro.SMS,
-                        "hash",
-                        OffsetDateTime.parse("2026-03-25T18:00:00Z"),
-                        OffsetDateTime.parse("2026-03-26T03:00:00Z"),
-                        "thimisu-backend",
-                        "127.0.0.1",
-                        "JUnit",
-                        OffsetDateTime.parse("2026-03-25T18:00:00Z"),
-                        OffsetDateTime.parse("2026-03-25T18:00:00Z"),
-                        new ContextoSolicitacaoFluxoPublico(
-                                "pt-BR",
-                                "America/Sao_Paulo",
-                                "app",
-                                "Thimisu",
-                                "ios",
-                                "Eickrono",
-                                "HML"
-                        )
-                )));
+        when(resolvedorContextoFluxoPublico.resolver(
+                eq("ana@eickrono.com"),
+                any(ContextoSolicitacaoFluxoPublico.class)
+        )).thenAnswer(invocation -> {
+            ContextoSolicitacaoFluxoPublico contextoAtual = invocation.getArgument(1);
+            ContextoSolicitacaoFluxoPublico contextoPersistido = new ContextoSolicitacaoFluxoPublico(
+                    "pt-BR",
+                    "America/Sao_Paulo",
+                    "app",
+                    "Thimisu",
+                    "ios",
+                    "Eickrono",
+                    "HML"
+            );
+            return contextoAtual.mesclarFaltantes(contextoPersistido);
+        });
         when(recuperacaoSenhaRepositorio.save(any(RecuperacaoSenha.class))).thenAnswer(invocation -> {
             RecuperacaoSenha recuperacao = invocation.getArgument(0);
             salvo.set(recuperacao);

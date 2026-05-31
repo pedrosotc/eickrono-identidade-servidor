@@ -1,0 +1,378 @@
+Project identidade_avatar_perfil_schema_alvo {
+  database_type: 'PostgreSQL'
+  Note: '''
+  DBML alvo para eliminar duplicacao entre tabelas legadas de perfil/pessoa,
+  formas de acesso e avatar.
+
+  Este arquivo nao representa a base atual. Ele descreve o resultado final
+  esperado antes de escrever migrations.
+
+  Regras do modelo alvo:
+  - perfis_identidade, vinculos_sociais, pessoas_identidade e pessoas_formas_acesso
+    deixam de existir no caminho operacional;
+  - identidade.pessoas guarda apenas dados cadastrais da pessoa;
+  - identidade.contatos_email guarda e-mail uma unica vez;
+  - identidade.contatos_telefone guarda telefone uma unica vez;
+  - autenticacao.usuarios guarda a conta central de login;
+  - autenticacao.usuarios.usuario guarda o login publico escolhido no cadastro;
+  - autenticacao.usuarios_formas_acesso guarda somente credenciais e vinculos
+    de autenticacao, sem dados visuais de avatar;
+  - identidade.avatar_origens cataloga provedores/produtos que podem fornecer
+    imagem de avatar;
+  - identidade.avatar_usuario guarda todas as opcoes de avatar do usuario dentro
+    de um projeto;
+  - a preferencia visual do avatar fica somente em identidade.avatar_usuario.preferido;
+  - nenhuma forma de acesso decide sozinha qual rede social e "principal";
+  - uma rede social autentica, mas a foto dela e apenas uma opcao de avatar;
+  - autenticacao social antes de cadastro/vinculo nao e persistida neste schema;
+  - o app pode manter dados sociais temporarios em memoria/estado local ate o
+    cadastro ou vinculo ser confirmado;
+  - durante um cadastro ja aberto, redes sociais confirmadas pelo app podem ser
+    persistidas apenas ligadas ao cadastro_id para sobreviver ate a confirmacao
+    de e-mail;
+  - essa persistencia por cadastro nao e contexto social pendente global e nao
+    autentica ninguem;
+  - os servidores so gravam rede social quando ja existe usuario/pessoa definitivo;
+  - foto enviada pelo dispositivo entra como avatar com origem THIMISU cadastrada
+    em identidade.avatar_origens, com URL publica/controlada;
+  - se nenhum avatar estiver preferido, o app usa sigla/iniciais.
+  '''
+}
+
+Table identidade.pessoas {
+  Note: '''
+  Pessoa canonica do ecossistema.
+  Substitui pessoas_identidade e perfis_identidade como fonte de dados humanos.
+  Nao guarda formas de login nem avatar de projeto.
+  '''
+
+  id uuid [pk, note: 'Chave da pessoa usada para ligar identidade, autenticacao, dispositivos e produtos sem depender de ids numericos legados.']
+  nome_completo varchar(255) [not null, note: 'Nome legal ou civil informado no cadastro e usado quando o produto precisa exibir dados cadastrais completos.']
+  nome_exibicao varchar(255) [note: 'Nome curto opcional para exibicao em telas onde o nome completo nao deve ser usado.']
+  tipo_pessoa varchar(16) [not null, default: 'FISICA', note: 'Define se os dados cadastrais seguem regras de pessoa fisica ou juridica.']
+  nome_fantasia varchar(255) [note: 'Nome comercial usado para pessoa juridica quando diferente do nome legal.']
+  sexo varchar(16) [note: 'Dado declarado de pessoa fisica quando o fluxo cadastral exigir essa informacao.']
+  pais_nascimento varchar(8) [note: 'Pais declarado no cadastro para compor dados pessoais e validacoes futuras.']
+  data_nascimento date [note: 'Data usada para cadastro pessoal e eventuais politicas de idade/elegibilidade.']
+  status_identidade varchar(32) [not null, note: 'Estado da identidade cadastral, separado da permissao de login e do acesso a projetos.']
+  criado_em timestamptz [not null, note: 'Momento em que a pessoa foi materializada no ecossistema.']
+  atualizado_em timestamptz [not null, note: 'Momento da ultima mudanca cadastral relevante da pessoa.']
+}
+
+Table identidade.contatos_email {
+  Note: '''
+  E-mails conhecidos da pessoa.
+  Permite evitar duplicar e-mail em pessoa, usuario e formas de acesso.
+  Um e-mail validado pode ser usado como contato e como identificador de login,
+  mas o texto do e-mail nao deve ser duplicado em autenticacao.usuarios_formas_acesso.
+  '''
+
+  id uuid [pk, note: 'Chave do contato de e-mail usada por cadastro, recuperacao, formas de acesso e notificacoes.']
+  pessoa_id uuid [not null, note: 'Pessoa dona deste contato.']
+  email_normalizado varchar(255) [not null, unique, note: 'E-mail em formato canonico para busca, login, bloqueio de duplicidade e envio de mensagens.']
+  principal boolean [not null, default: false, note: 'Define qual e-mail deve ser usado como contato padrao da pessoa. Nao define avatar nem rede social principal.']
+  verificado_em timestamptz [note: 'Quando preenchido, comprova que a pessoa validou posse deste e-mail.']
+  criado_em timestamptz [not null, note: 'Momento em que o e-mail foi registrado.']
+  atualizado_em timestamptz [not null, note: 'Momento da ultima alteracao de status ou preferencia deste e-mail.']
+
+  indexes {
+    (pessoa_id, principal) [name: 'idx_contatos_email_pessoa_principal']
+  }
+}
+
+Table identidade.contatos_telefone {
+  Note: '''
+  Telefones conhecidos da pessoa.
+  Evita duplicar telefone em cadastro, pessoa, usuario e validacoes.
+  O telefone pode ser guardado em campos separados para exibicao e tambem em
+  telefone_normalizado para busca, unicidade e integracoes.
+  '''
+
+  id uuid [pk, note: 'Chave do contato telefonico usada por cadastro, validacao, recuperacao e notificacoes.']
+  pessoa_id uuid [not null, note: 'Pessoa dona deste telefone.']
+  pais_iso varchar(2) [note: 'Pais usado para interpretar e exibir o telefone, como BR.']
+  ddi varchar(4) [not null, note: 'Codigo internacional do telefone, como 55 para Brasil.']
+  ddd varchar(8) [note: 'Codigo regional quando o pais usa area code separado.']
+  numero_nacional varchar(32) [not null, note: 'Numero informado sem DDI, preservando formato suficiente para exibicao e suporte.']
+  telefone_normalizado varchar(32) [not null, unique, note: 'Telefone canonico para busca e duplicidade, preferencialmente em formato E.164.']
+  principal boolean [not null, default: false, note: 'Define qual telefone deve ser usado como contato padrao da pessoa. Nao define login nem avatar.']
+  verificado_em timestamptz [note: 'Quando preenchido, comprova que a pessoa validou posse deste telefone.']
+  criado_em timestamptz [not null, note: 'Momento em que o telefone foi registrado.']
+  atualizado_em timestamptz [not null, note: 'Momento da ultima alteracao de status, numero ou preferencia deste telefone.']
+
+  indexes {
+    (pessoa_id, principal) [name: 'idx_contatos_telefone_pessoa_principal']
+    (ddi, ddd, numero_nacional) [name: 'idx_contatos_telefone_partes']
+  }
+}
+
+Table catalogo.clientes_ecossistema {
+  Note: '''
+  Projeto/produto do ecossistema.
+  O mesmo usuario pode existir em varios projetos com status e avatar diferentes.
+  '''
+
+  id bigint [pk, increment, note: 'Chave interna do projeto usada nos vinculos de usuario, cadastros e politicas de fluxo.']
+  codigo varchar(64) [not null, unique, note: 'Codigo estavel usado por configuracoes e integracoes para resolver o projeto sem depender do id numerico.']
+  nome varchar(255) [not null, note: 'Nome administrativo do projeto.']
+  tipo varchar(32) [not null, note: 'Classificacao do cliente para aplicar politicas de app, backend, produto ou integracao.']
+  client_id_oidc varchar(255) [unique, note: 'Client id usado quando um fluxo OIDC precisa identificar o projeto.']
+  ativo boolean [not null, default: true, note: 'Quando false, impede novos fluxos para o projeto sem apagar historico.']
+  tipo_produto_exibicao varchar(32) [note: 'Classificacao visual usada em mensagens publicas de cadastro, login e recuperacao.']
+  produto_exibicao varchar(128) [note: 'Nome exibido ao usuario nos fluxos publicos.']
+  canal_exibicao varchar(64) [note: 'Canal de origem do fluxo publico, como app, web ou integracao.']
+  exige_validacao_telefone boolean [not null, default: false, note: 'Define se o projeto exige telefone validado alem do e-mail.']
+  criado_em timestamptz [not null, note: 'Momento em que o projeto entrou no catalogo.']
+  atualizado_em timestamptz [not null, note: 'Momento da ultima mudanca de configuracao do projeto.']
+}
+
+Table identidade.avatar_origens {
+  Note: '''
+  Catalogo de origens de avatar.
+  Cada registro representa um provedor social ou produto Eickrono capaz de
+  fornecer imagem de perfil. Exemplo: GOOGLE, APPLE, THIMISU.
+  A origem e catalogada para evitar enums espalhados no codigo e permitir
+  inclusao controlada de novos produtos/provedores.
+  '''
+
+  id bigint [pk, increment, note: 'Chave interna da origem de avatar.']
+  codigo varchar(64) [not null, unique, note: 'Codigo estavel usado por payloads e regras de negocio, como GOOGLE, APPLE ou THIMISU.']
+  nome varchar(128) [not null, note: 'Nome administrativo/visual da origem para suporte e auditoria.']
+  tipo varchar(32) [not null, note: 'Classifica a origem, por exemplo PROVEDOR_SOCIAL, PRODUTO_EICKRONO ou SISTEMA.']
+  cliente_ecossistema_id bigint [note: 'Projeto/produto associado quando a origem for um produto Eickrono, como THIMISU.']
+  permite_vinculo_social boolean [not null, default: false, note: 'Indica se esta origem tambem pode autenticar/vincular uma forma de acesso social.']
+  permite_upload_usuario boolean [not null, default: false, note: 'Indica se esta origem aceita imagem enviada pelo usuario em um produto Eickrono.']
+  ativo boolean [not null, default: true, note: 'Quando false, impede novas imagens desta origem sem apagar historico.']
+  criado_em timestamptz [not null, note: 'Momento em que a origem entrou no catalogo.']
+  atualizado_em timestamptz [not null, note: 'Momento da ultima mudanca operacional da origem.']
+}
+
+Table autenticacao.usuarios {
+  Note: '''
+  Conta central de autenticacao.
+  Substitui o uso operacional de perfis_identidade como conta de login.
+  Nao guarda e-mail duplicado nem avatar. O campo usuario e a fonte canonica do
+  login publico escolhido no cadastro.
+  '''
+
+  id uuid [pk, note: 'Chave da conta usada por formas de acesso, sessoes, dispositivos e vinculos com projetos.']
+  pessoa_id uuid [not null, unique, note: 'Pessoa dona da conta de autenticacao.']
+  usuario varchar(255) [not null, unique, note: 'Login publico obrigatorio escolhido no cadastro e usado preferencialmente no app em vez de expor e-mail.']
+  sub_remoto varchar(255) [unique, note: 'Subject remoto estavel quando existir integracao com provedor de identidade externo.']
+  status_global varchar(32) [not null, note: 'Estado da conta no ecossistema inteiro antes da avaliacao por projeto.']
+  credencial_local_habilitada boolean [not null, default: true, note: 'Permite bloquear login por senha sem apagar redes sociais, historico ou vinculos de projeto.']
+  ultimo_login_em timestamptz [note: 'Momento do ultimo login concluido em qualquer projeto.']
+  criado_em timestamptz [not null, note: 'Momento em que a conta central foi criada.']
+  atualizado_em timestamptz [not null, note: 'Momento da ultima mudanca da conta central.']
+}
+
+Table autenticacao.usuarios_clientes_ecossistema {
+  Note: '''
+  Estado do usuario dentro de um projeto.
+  Esta tabela controla acesso ao projeto, mas nao guarda a preferencia de avatar.
+  A preferencia visual fica em identidade.avatar_usuario.
+  '''
+
+  id uuid [pk, note: 'Chave do vinculo entre usuario e projeto.']
+  usuario_id uuid [not null, note: 'Conta central vinculada ao projeto.']
+  cliente_ecossistema_id bigint [not null, note: 'Projeto onde este estado e valido.']
+  status_vinculo varchar(32) [not null, note: 'Controla se a conta pode entrar neste projeto.']
+  identificador_publico_cliente varchar(255) [note: 'Identificador seguro para exibicao/publicacao dentro do projeto, sem expor chaves internas.']
+  ultimo_acesso_em timestamptz [note: 'Momento do ultimo acesso ao projeto especifico.']
+  vinculado_em timestamptz [not null, note: 'Momento em que o usuario passou a existir neste projeto.']
+  atualizado_em timestamptz [not null, note: 'Momento da ultima mudanca do estado no projeto.']
+  revogado_em timestamptz [note: 'Quando preenchido, encerra o acesso ao projeto preservando historico.']
+  motivo_revogacao varchar(64) [note: 'Codigo funcional que explica a revogacao do acesso ao projeto.']
+
+  indexes {
+    (usuario_id, cliente_ecossistema_id) [unique, name: 'uk_usuarios_clientes_ecossistema_usuario_cliente']
+    (cliente_ecossistema_id, status_vinculo) [name: 'idx_usuarios_clientes_ecossistema_cliente_status']
+  }
+}
+
+Table autenticacao.usuarios_formas_acesso {
+  Note: '''
+  Formas de login da conta central.
+  Substitui pessoas_formas_acesso e vinculos_sociais para autenticacao.
+  Nao guarda nome nem URL de avatar. Se uma rede social fornecer foto, essa foto
+  vira opcao em identidade.avatar_usuario.
+
+  Regras de unicidade:
+  - login por usuario usa autenticacao.usuarios.usuario;
+  - login por e-mail usa identidade.contatos_email.email_normalizado;
+  - login social usa provedor + identificador_externo;
+  - login local/senha nao deve duplicar usuario ou e-mail neste registro.
+  '''
+
+  id uuid [pk, note: 'Chave da forma de acesso usada para localizar login social, login local e auditoria.']
+  usuario_id uuid [not null, note: 'Conta central que pode usar esta forma de acesso.']
+  contato_email_id uuid [note: 'Referencia o e-mail canonico quando a credencial depende de contato validado. O texto do e-mail continua apenas em identidade.contatos_email.']
+  tipo varchar(32) [not null, note: 'Define o mecanismo de autenticacao: SENHA_LOCAL, SOCIAL ou outro tipo futuro.']
+  provedor varchar(64) [not null, note: 'Autoridade que emitiu ou valida a credencial, como LOCAL, EMAIL, GOOGLE ou APPLE.']
+  identificador_externo varchar(255) [note: 'Chave externa usada somente quando o provedor fornece um identificador proprio, como GOOGLE ou APPLE. Nao deve repetir usuario nem e-mail.']
+  verificado_em timestamptz [note: 'Quando preenchido, comprova que a forma de acesso foi validada.']
+  vinculado_em timestamptz [not null, note: 'Momento em que a credencial passou a pertencer ao usuario.']
+  desvinculado_em timestamptz [note: 'Quando preenchido, impede uso da credencial sem apagar historico.']
+
+  indexes {
+    (tipo, provedor, identificador_externo) [unique, name: 'uk_usuarios_formas_acesso_identificador', note: 'Unico parcial quando identificador_externo IS NOT NULL.']
+    (usuario_id, tipo, contato_email_id) [unique, name: 'uk_usuarios_formas_acesso_email', note: 'Unico parcial quando contato_email_id IS NOT NULL.']
+    (usuario_id, tipo, provedor) [name: 'idx_usuarios_formas_acesso_usuario_tipo_provedor']
+  }
+}
+
+Table identidade.avatar_usuario {
+  Note: '''
+  Opcoes de avatar disponiveis para o usuario dentro de um projeto.
+  Unifica fotos vindas de redes sociais e fotos carregadas/tiradas em produtos
+  Eickrono. A origem aponta para identidade.avatar_origens, que identifica quem
+  forneceu a imagem, como GOOGLE, APPLE, THIMISU ou outro produto/provedor.
+
+  Esta tabela substitui avatar_preferido_* em usuarios_clientes_ecossistema e
+  elimina dados de avatar em formas de acesso. A forma de acesso autentica; esta
+  tabela decide quais imagens existem e qual delas e preferida.
+  '''
+
+  id uuid [pk, note: 'Chave da opcao de avatar.']
+  usuario_cliente_id uuid [not null, note: 'Vinculo usuario x projeto onde esta opcao pode ser usada.']
+  origem_id bigint [not null, note: 'Origem catalogada que forneceu a imagem. Exemplos de codigo no catalogo: GOOGLE, APPLE, THIMISU.']
+  forma_acesso_id uuid [note: 'Forma de acesso que forneceu a imagem quando a origem tambem autentica o usuario, como GOOGLE ou APPLE.']
+  nome_exibicao_externo varchar(255) [note: 'Nome retornado pela rede social junto com a imagem, quando existir.']
+  url_avatar varchar(2048) [not null, note: 'URL publica/controlada que o app deve carregar para exibir esta opcao de avatar.']
+  storage_key varchar(1024) [note: 'Caminho interno relativo ao bucket dedicado de avatares do ambiente: eickrono-avatares-hml em HML e eickrono-avatares-prod em producao. Nao deve ser usado pelo app como URL.']
+  content_type varchar(128) [note: 'Tipo MIME da imagem quando o backend controla o arquivo.']
+  tamanho_bytes bigint [note: 'Tamanho do arquivo quando o backend controla a imagem.']
+  hash_conteudo varchar(128) [note: 'Hash usado para detectar mudanca real da imagem e decidir atualizacao de cache.']
+  versao varchar(128) [note: 'Valor tecnico para cache do app: hash, etag, timestamp ou versao calculada pelo servidor.']
+  preferido boolean [not null, default: false, note: 'Unico marcador que define qual avatar sera usado no projeto. Se nenhum registro estiver true, o app usa sigla/iniciais.']
+  criado_em timestamptz [not null, note: 'Momento em que a opcao passou a existir.']
+  atualizado_em timestamptz [not null, note: 'Momento em que URL, versao, origem ou preferencia visual mudou.']
+  removido_em timestamptz [note: 'Quando preenchido, esconde a opcao sem apagar historico.']
+
+  indexes {
+    (usuario_cliente_id, preferido) [name: 'idx_avatar_usuario_preferido', note: 'Deve virar indice unico parcial para permitir no maximo um preferido ativo por usuario_cliente_id.']
+    (usuario_cliente_id, origem_id, forma_acesso_id) [unique, name: 'uk_avatar_usuario_forma_origem']
+    (usuario_cliente_id, origem_id, storage_key) [unique, name: 'uk_avatar_usuario_storage_origem']
+  }
+}
+
+Table autenticacao.cadastros_conta {
+  Note: '''
+  Processo temporario de cadastro.
+  Guarda somente estado do processo. Dados que viram usuario, contato, forma de
+  acesso ou avatar devem ser gravados nas tabelas especificas ao concluir.
+  '''
+
+  id uuid [pk, note: 'Chave publica do processo de cadastro.']
+  pessoa_id uuid [note: 'Pessoa reservada/materializada durante o cadastro quando necessario.']
+  usuario_id uuid [note: 'Usuario central criado ao concluir o cadastro.']
+  cliente_ecossistema_id bigint [not null, note: 'Projeto onde o cadastro foi iniciado.']
+  email_id uuid [not null, note: 'E-mail que precisa ser validado para concluir o cadastro.']
+  telefone_id uuid [note: 'Telefone que precisa ser validado quando o projeto exige telefone.']
+  usuario_reservado varchar(255) [not null, note: 'Login publico reservado durante o cadastro. Ao concluir, o valor vira autenticacao.usuarios.usuario e deixa de ser dado operacional deste processo.']
+  status_processo varchar(32) [not null, note: 'Etapa atual do cadastro: aberto, aguardando validacao, concluido, cancelado ou expirado.']
+  codigo_email_hash varchar(64) [not null, note: 'Hash do codigo de confirmacao de e-mail.']
+  codigo_email_gerado_em timestamptz [not null, note: 'Momento em que o codigo atual foi gerado.']
+  codigo_email_expira_em timestamptz [not null, note: 'Prazo maximo para usar o codigo atual.']
+  tentativas_confirmacao_email integer [not null, default: 0, note: 'Protege contra tentativa de adivinhar codigo.']
+  reenvios_email integer [not null, default: 0, note: 'Controla limite de reenvio de codigo.']
+  email_confirmado_em timestamptz [note: 'Quando preenchido, confirma que o e-mail foi validado.']
+  concluido_em timestamptz [note: 'Quando preenchido, indica que o processo gerou conta final.']
+  ip_solicitante varchar(64) [note: 'Origem de rede usada para auditoria e suporte.']
+  user_agent_solicitante varchar(512) [note: 'App/navegador usado para abrir o cadastro.']
+  criado_em timestamptz [not null, note: 'Momento em que o cadastro foi iniciado.']
+  atualizado_em timestamptz [not null, note: 'Momento da ultima mudanca do processo.']
+
+  indexes {
+    (cliente_ecossistema_id, status_processo) [name: 'idx_cadastros_conta_cliente_status']
+    usuario_reservado [name: 'idx_cadastros_conta_usuario_reservado']
+    email_id [name: 'idx_cadastros_conta_email']
+    telefone_id [name: 'idx_cadastros_conta_telefone']
+  }
+}
+
+Table autenticacao.cadastros_conta_avatares {
+  Note: '''
+  Opcoes de avatar coletadas durante o cadastro antes da conta final existir.
+  Ao concluir o cadastro, cada registro vira identidade.avatar_usuario.
+  Esta tabela nao representa vinculo social definitivo. A forma de acesso social
+  so deve ser criada ao concluir o cadastro.
+  '''
+
+  id uuid [pk, note: 'Chave da opcao temporaria de avatar no cadastro.']
+  cadastro_id uuid [not null, note: 'Processo de cadastro que recebeu esta opcao de imagem.']
+  origem_id bigint [not null, note: 'Origem catalogada que forneceu a imagem. Exemplos de codigo no catalogo: GOOGLE, APPLE, THIMISU.']
+  url_avatar varchar(2048) [not null, note: 'URL que sera copiada para a opcao final de avatar se o cadastro concluir.']
+  storage_key varchar(1024) [note: 'Caminho interno temporario relativo ao bucket dedicado de avatares do ambiente: eickrono-avatares-hml em HML e eickrono-avatares-prod em producao.']
+  content_type varchar(128) [note: 'Tipo MIME da imagem quando o backend controla o arquivo temporario.']
+  tamanho_bytes bigint [note: 'Tamanho do arquivo quando o backend controla a imagem temporaria.']
+  hash_conteudo varchar(128) [note: 'Hash usado para versionar e comparar a imagem temporaria.']
+  versao varchar(128) [note: 'Versao/hash usado depois pelo app para cache de avatar.']
+  preferido boolean [not null, default: false, note: 'Define qual opcao do cadastro deve virar avatar preferido ao concluir. Se todas forem false, o usuario entra com sigla/iniciais.']
+  criado_em timestamptz [not null, note: 'Momento em que a opcao foi coletada durante o cadastro.']
+  atualizado_em timestamptz [not null, note: 'Momento da ultima mudanca da opcao temporaria.']
+
+  indexes {
+    (cadastro_id, preferido) [name: 'idx_cadastros_conta_avatares_preferido', note: 'Deve virar indice unico parcial para permitir no maximo uma opcao preferida por cadastro.']
+  }
+}
+
+Table autenticacao.cadastros_conta_vinculos_sociais_confirmados {
+  Note: '''
+  Redes sociais que o app ja confirmou com Google/Apple durante um cadastro em
+  andamento.
+
+  Esta tabela existe somente para carregar os dados ate o cadastro ser concluido
+  por validacao de e-mail. Ela e sempre vinculada a autenticacao.cadastros_conta
+  e nao substitui autenticacao.usuarios_formas_acesso.
+
+  Diferenca para contexto social pendente global:
+  - nao representa tentativa de login;
+  - nao autentica;
+  - nao pertence a usuario definitivo ainda;
+  - nao e compartilhada entre fluxos;
+  - so pode ser consumida pelo proprio cadastro_id.
+
+  Ao concluir o cadastro, o servico consome estes registros, cria as formas
+  sociais definitivas em autenticacao.usuarios_formas_acesso e cria/atualiza as
+  opcoes correspondentes em identidade.avatar_usuario.
+  '''
+
+  id uuid [pk, note: 'Chave tecnica do vinculo social confirmado dentro do cadastro.']
+  cadastro_id uuid [not null, note: 'Cadastro em andamento dono destes dados sociais. Sem este cadastro, o registro nao pode existir.']
+  provedor varchar(64) [not null, note: 'Origem autenticadora confirmada pelo app, como GOOGLE ou APPLE.']
+  identificador_externo varchar(255) [not null, note: 'Identificador estavel retornado pelo provedor social para criar a forma de acesso definitiva ao concluir o cadastro.']
+  nome_usuario_externo varchar(255) [note: 'Identificador textual opcional retornado pelo provedor, usado somente como metadado da forma social.']
+  email_social varchar(255) [note: 'E-mail retornado pela rede social quando existir. Nao substitui o e-mail do cadastro nem cria contato sem validacao do fluxo.']
+  nome_exibicao_externo varchar(255) [note: 'Nome retornado pelo provedor social para metadado e possivel exibicao de avatar.']
+  url_avatar_externo varchar(2048) [note: 'URL de foto retornada pelo provedor social. Se preferida, vira opcao de avatar ao concluir o cadastro.']
+  avatar_preferido boolean [not null, default: false, note: 'Marca qual foto social foi escolhida visualmente no cadastro. Deve haver no maximo uma true por cadastro ativo.']
+  consumido_em timestamptz [note: 'Quando preenchido, indica que os dados ja foram materializados em forma de acesso/avatar definitivos.']
+  criado_em timestamptz [not null, note: 'Momento em que o cadastro recebeu estes dados sociais confirmados.']
+  atualizado_em timestamptz [not null, note: 'Momento da ultima alteracao ou consumo destes dados.']
+
+  indexes {
+    (cadastro_id, provedor, identificador_externo) [unique, name: 'uk_cadastros_conta_vinculos_sociais_ativos', note: 'Unico parcial quando consumido_em IS NULL.']
+    cadastro_id [unique, name: 'uk_cadastros_conta_vinculos_sociais_avatar_preferido', note: 'Unico parcial quando avatar_preferido IS TRUE AND consumido_em IS NULL.']
+  }
+}
+
+Ref: identidade.contatos_email.pessoa_id > identidade.pessoas.id [delete: cascade]
+Ref: identidade.contatos_telefone.pessoa_id > identidade.pessoas.id [delete: cascade]
+Ref: identidade.avatar_origens.cliente_ecossistema_id > catalogo.clientes_ecossistema.id
+Ref: autenticacao.usuarios.pessoa_id > identidade.pessoas.id
+Ref: autenticacao.usuarios_clientes_ecossistema.usuario_id > autenticacao.usuarios.id
+Ref: autenticacao.usuarios_clientes_ecossistema.cliente_ecossistema_id > catalogo.clientes_ecossistema.id
+Ref: autenticacao.usuarios_formas_acesso.usuario_id > autenticacao.usuarios.id
+Ref: autenticacao.usuarios_formas_acesso.contato_email_id > identidade.contatos_email.id
+Ref: identidade.avatar_usuario.usuario_cliente_id > autenticacao.usuarios_clientes_ecossistema.id [delete: cascade]
+Ref: identidade.avatar_usuario.origem_id > identidade.avatar_origens.id
+Ref: identidade.avatar_usuario.forma_acesso_id > autenticacao.usuarios_formas_acesso.id
+Ref: autenticacao.cadastros_conta.pessoa_id > identidade.pessoas.id
+Ref: autenticacao.cadastros_conta.usuario_id > autenticacao.usuarios.id
+Ref: autenticacao.cadastros_conta.cliente_ecossistema_id > catalogo.clientes_ecossistema.id
+Ref: autenticacao.cadastros_conta.email_id > identidade.contatos_email.id
+Ref: autenticacao.cadastros_conta.telefone_id > identidade.contatos_telefone.id
+Ref: autenticacao.cadastros_conta_avatares.cadastro_id > autenticacao.cadastros_conta.id [delete: cascade]
+Ref: autenticacao.cadastros_conta_avatares.origem_id > identidade.avatar_origens.id
+Ref: autenticacao.cadastros_conta_vinculos_sociais_confirmados.cadastro_id > autenticacao.cadastros_conta.id [delete: cascade]

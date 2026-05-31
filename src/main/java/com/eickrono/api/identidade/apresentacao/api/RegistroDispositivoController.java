@@ -9,7 +9,6 @@ import com.eickrono.api.identidade.aplicacao.modelo.PerfilSistemaProjetoPorEmail
 import com.eickrono.api.identidade.aplicacao.modelo.ProjetoFluxoPublicoResolvido;
 import com.eickrono.api.identidade.aplicacao.servico.ClienteContextoPessoaPerfilSistema;
 import com.eickrono.api.identidade.aplicacao.servico.ClienteAdministracaoVinculosSociaisKeycloak;
-import com.eickrono.api.identidade.aplicacao.servico.ContextoSocialPendenteJdbc;
 import com.eickrono.api.identidade.aplicacao.servico.LocalizadorCadastroContaSessaoSocialJdbc;
 import com.eickrono.api.identidade.aplicacao.servico.LocalizadorPerfilSistemaProjetoPorEmailJdbc;
 import com.eickrono.api.identidade.apresentacao.dto.ConfirmacaoRegistroRequest;
@@ -62,7 +61,6 @@ public class RegistroDispositivoController {
     private final RegistroDispositivoLoginSilenciosoService registroDispositivoLoginSilenciosoService;
     private final ClienteContextoPessoaPerfilSistema clienteContextoPessoaPerfilSistema;
     private final ClienteAdministracaoVinculosSociaisKeycloak clienteAdministracaoVinculosSociaisKeycloak;
-    private final ContextoSocialPendenteJdbc contextoSocialPendenteJdbc;
     private final ResolvedorProjetoFluxoPublico resolvedorProjetoFluxoPublico;
     private final LocalizadorCadastroContaSessaoSocialJdbc localizadorCadastroContaSessaoSocial;
     private final LocalizadorPerfilSistemaProjetoPorEmailJdbc localizadorPerfilSistemaProjetoPorEmail;
@@ -74,7 +72,6 @@ public class RegistroDispositivoController {
                                          RegistroDispositivoLoginSilenciosoService registroDispositivoLoginSilenciosoService,
                                          ClienteContextoPessoaPerfilSistema clienteContextoPessoaPerfilSistema,
                                          ClienteAdministracaoVinculosSociaisKeycloak clienteAdministracaoVinculosSociaisKeycloak,
-                                         ContextoSocialPendenteJdbc contextoSocialPendenteJdbc,
                                          ResolvedorProjetoFluxoPublico resolvedorProjetoFluxoPublico,
                                          LocalizadorCadastroContaSessaoSocialJdbc localizadorCadastroContaSessaoSocial,
                                          LocalizadorPerfilSistemaProjetoPorEmailJdbc localizadorPerfilSistemaProjetoPorEmail,
@@ -85,7 +82,6 @@ public class RegistroDispositivoController {
         this.registroDispositivoLoginSilenciosoService = registroDispositivoLoginSilenciosoService;
         this.clienteContextoPessoaPerfilSistema = clienteContextoPessoaPerfilSistema;
         this.clienteAdministracaoVinculosSociaisKeycloak = clienteAdministracaoVinculosSociaisKeycloak;
-        this.contextoSocialPendenteJdbc = contextoSocialPendenteJdbc;
         this.resolvedorProjetoFluxoPublico = resolvedorProjetoFluxoPublico;
         this.localizadorCadastroContaSessaoSocial = localizadorCadastroContaSessaoSocial;
         this.localizadorPerfilSistemaProjetoPorEmail = localizadorPerfilSistemaProjetoPorEmail;
@@ -239,21 +235,6 @@ public class RegistroDispositivoController {
         } catch (RuntimeException ignored) {
             // Mantém o contrato mínimo do erro mesmo quando a consulta administrativa falhar.
         }
-        if (StringUtils.hasText(provedorSocial[0]) && StringUtils.hasText(identificadorExterno[0])) {
-            UUID contextoSocialPendenteId = contextoSocialPendenteJdbc.registrarOuAtualizar(
-                    projeto,
-                    provedorSocial[0],
-                    identificadorExterno[0],
-                    emailSocial.orElse(null),
-                    nomeUsuarioExterno[0],
-                    nomeExibicaoExterno[0],
-                    urlAvatarExterno[0],
-                    perfilSistemaProjetoAtual.map(PerfilSistemaProjetoPorEmailResolvido::perfilSistemaId).orElse(null),
-                    perfilSistemaProjetoAtual.map(PerfilSistemaProjetoPorEmailResolvido::identificadorPublicoSistemaSugerido).orElse(null)
-            );
-            detalhes.put("contextoSocialPendenteId", contextoSocialPendenteId);
-        }
-
         return detalhes;
     }
 

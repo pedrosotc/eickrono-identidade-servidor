@@ -1,0 +1,442 @@
+{
+  "version": "1.0.0",
+  "darkMode": true,
+  "gridEnabling": false,
+  "detailLevel": "All",
+  "tablePositions": [
+    {
+      "name": "pessoas",
+      "schemaName": "identidade",
+      "x": -194.94472917516424,
+      "y": 1495.8157225978612
+    },
+    {
+      "name": "contatos_email",
+      "schemaName": "identidade",
+      "x": -201.75893815953924,
+      "y": 2638.9297249288365
+    },
+    {
+      "name": "contatos_telefone",
+      "schemaName": "identidade",
+      "x": -207.53213151891424,
+      "y": 1074.415296859976
+    },
+    {
+      "name": "clientes_ecossistema",
+      "schemaName": "catalogo",
+      "x": -608.996540138068,
+      "y": 697.449838688452
+    },
+    {
+      "name": "avatar_origens",
+      "schemaName": "identidade",
+      "x": -233.85640341931799,
+      "y": 2944.9297249288365
+    },
+    {
+      "name": "usuarios",
+      "schemaName": "autenticacao",
+      "x": 552.3963666990384,
+      "y": 1392.3715346032764
+    },
+    {
+      "name": "usuarios_clientes_ecossistema",
+      "schemaName": "autenticacao",
+      "x": -171.04367261499885,
+      "y": 633.5583703185571
+    },
+    {
+      "name": "usuarios_formas_acesso",
+      "schemaName": "autenticacao",
+      "x": 1943.923487794132,
+      "y": 1362.7549743011277
+    },
+    {
+      "name": "avatar_usuario",
+      "schemaName": "identidade",
+      "x": 1942.491992413228,
+      "y": 603.9960762903303
+    },
+    {
+      "name": "cadastros_conta",
+      "schemaName": "autenticacao",
+      "x": -221.45254167516424,
+      "y": 1930.8375177966072
+    },
+    {
+      "name": "cadastros_conta_avatares",
+      "schemaName": "autenticacao",
+      "x": 1951.9369349782128,
+      "y": 1893.6332156443102
+    }
+  ],
+  "tableGroupCollapseStates": [],
+  "stickyNoteLayouts": [],
+  "referencePaths": [
+    {
+      "firstFieldNames": [
+        "pessoa_id"
+      ],
+      "firstTableName": "contatos_email",
+      "firstSchemaName": "identidade",
+      "firstRelation": "*",
+      "secondFieldNames": [
+        "id"
+      ],
+      "secondTableName": "pessoas",
+      "secondSchemaName": "identidade",
+      "secondRelation": "1",
+      "firstEndpointSide": "left",
+      "secondEndpointSide": "left",
+      "checkPoints": [
+        {
+          "x": -374.10167060638287,
+          "y": 2718.9297249288365
+        },
+        {
+          "x": -374.10167060638287,
+          "y": 1551.8157225978612
+        }
+      ]
+    },
+    {
+      "firstFieldNames": [
+        "pessoa_id"
+      ],
+      "firstTableName": "contatos_telefone",
+      "firstSchemaName": "identidade",
+      "firstRelation": "*",
+      "secondFieldNames": [
+        "id"
+      ],
+      "secondTableName": "pessoas",
+      "secondSchemaName": "identidade",
+      "secondRelation": "1",
+      "checkPoints": []
+    },
+    {
+      "firstFieldNames": [
+        "cliente_ecossistema_id"
+      ],
+      "firstTableName": "avatar_origens",
+      "firstSchemaName": "identidade",
+      "firstRelation": "*",
+      "secondFieldNames": [
+        "id"
+      ],
+      "secondTableName": "clientes_ecossistema",
+      "secondSchemaName": "catalogo",
+      "secondRelation": "1",
+      "checkPoints": []
+    },
+    {
+      "firstFieldNames": [
+        "pessoa_id"
+      ],
+      "firstTableName": "usuarios",
+      "firstSchemaName": "autenticacao",
+      "firstRelation": "*",
+      "secondFieldNames": [
+        "id"
+      ],
+      "secondTableName": "pessoas",
+      "secondSchemaName": "identidade",
+      "secondRelation": "1",
+      "checkPoints": []
+    },
+    {
+      "firstFieldNames": [
+        "usuario_id"
+      ],
+      "firstTableName": "usuarios_clientes_ecossistema",
+      "firstSchemaName": "autenticacao",
+      "firstRelation": "*",
+      "secondFieldNames": [
+        "id"
+      ],
+      "secondTableName": "usuarios",
+      "secondSchemaName": "autenticacao",
+      "secondRelation": "1",
+      "secondEndpointSide": "left",
+      "checkPoints": [
+        {
+          "x": 518.3323484428817,
+          "y": 713.5583703185571
+        }
+      ]
+    },
+    {
+      "firstFieldNames": [
+        "cliente_ecossistema_id"
+      ],
+      "firstTableName": "usuarios_clientes_ecossistema",
+      "firstSchemaName": "autenticacao",
+      "firstRelation": "*",
+      "secondFieldNames": [
+        "id"
+      ],
+      "secondTableName": "clientes_ecossistema",
+      "secondSchemaName": "catalogo",
+      "secondRelation": "1",
+      "firstEndpointSide": "left",
+      "secondEndpointSide": "right",
+      "checkPoints": []
+    },
+    {
+      "firstFieldNames": [
+        "usuario_id"
+      ],
+      "firstTableName": "usuarios_formas_acesso",
+      "firstSchemaName": "autenticacao",
+      "firstRelation": "*",
+      "secondFieldNames": [
+        "id"
+      ],
+      "secondTableName": "usuarios",
+      "secondSchemaName": "autenticacao",
+      "secondRelation": "1",
+      "firstEndpointSide": "left",
+      "secondEndpointSide": "left",
+      "checkPoints": [
+        {
+          "x": 1925.8235294961487,
+          "y": 1438.9548908970942
+        },
+        {
+          "x": 518.3323484428817,
+          "y": 1438.9548908970942
+        }
+      ]
+    },
+    {
+      "firstFieldNames": [
+        "contato_email_id"
+      ],
+      "firstTableName": "usuarios_formas_acesso",
+      "firstSchemaName": "autenticacao",
+      "firstRelation": "*",
+      "secondFieldNames": [
+        "id"
+      ],
+      "secondTableName": "contatos_email",
+      "secondSchemaName": "identidade",
+      "secondRelation": "1",
+      "firstEndpointSide": "right",
+      "checkPoints": [
+        {
+          "x": 2353.6540214774163,
+          "y": 1474.7549743011277
+        },
+        {
+          "x": 2353.6540214774163,
+          "y": 2686.9297249288365
+        }
+      ]
+    },
+    {
+      "firstFieldNames": [
+        "usuario_cliente_id"
+      ],
+      "firstTableName": "avatar_usuario",
+      "firstSchemaName": "identidade",
+      "firstRelation": "*",
+      "secondFieldNames": [
+        "id"
+      ],
+      "secondTableName": "usuarios_clientes_ecossistema",
+      "secondSchemaName": "autenticacao",
+      "secondRelation": "1",
+      "checkPoints": []
+    },
+    {
+      "firstFieldNames": [
+        "origem_id"
+      ],
+      "firstTableName": "avatar_usuario",
+      "firstSchemaName": "identidade",
+      "firstRelation": "*",
+      "secondFieldNames": [
+        "id"
+      ],
+      "secondTableName": "avatar_origens",
+      "secondSchemaName": "identidade",
+      "secondRelation": "1",
+      "checkPoints": []
+    },
+    {
+      "firstFieldNames": [
+        "forma_acesso_id"
+      ],
+      "firstTableName": "avatar_usuario",
+      "firstSchemaName": "identidade",
+      "firstRelation": "*",
+      "secondFieldNames": [
+        "id"
+      ],
+      "secondTableName": "usuarios_formas_acesso",
+      "secondSchemaName": "autenticacao",
+      "secondRelation": "1",
+      "secondEndpointSide": "right",
+      "checkPoints": [
+        {
+          "x": 2416.187055781153,
+          "y": 747.9960762903303
+        },
+        {
+          "x": 2416.187055781153,
+          "y": 1410.7549743011277
+        }
+      ]
+    },
+    {
+      "firstFieldNames": [
+        "pessoa_id"
+      ],
+      "firstTableName": "cadastros_conta",
+      "firstSchemaName": "autenticacao",
+      "firstRelation": "*",
+      "secondFieldNames": [
+        "id"
+      ],
+      "secondTableName": "pessoas",
+      "secondSchemaName": "identidade",
+      "secondRelation": "1",
+      "firstEndpointSide": "left",
+      "secondEndpointSide": "left",
+      "checkPoints": [
+        {
+          "x": -257.2956309179602,
+          "y": 2010.8375177966072
+        },
+        {
+          "x": -257.2956309179602,
+          "y": 1543.8157225978612
+        }
+      ]
+    },
+    {
+      "firstFieldNames": [
+        "usuario_id"
+      ],
+      "firstTableName": "cadastros_conta",
+      "firstSchemaName": "autenticacao",
+      "firstRelation": "*",
+      "secondFieldNames": [
+        "id"
+      ],
+      "secondTableName": "usuarios",
+      "secondSchemaName": "autenticacao",
+      "secondRelation": "1",
+      "secondEndpointSide": "right",
+      "checkPoints": [
+        {
+          "x": 980.5699350129757,
+          "y": 2042.8375177966072
+        },
+        {
+          "x": 980.5699350129757,
+          "y": 1749.545759603141
+        }
+      ]
+    },
+    {
+      "firstFieldNames": [
+        "cliente_ecossistema_id"
+      ],
+      "firstTableName": "cadastros_conta",
+      "firstSchemaName": "autenticacao",
+      "firstRelation": "*",
+      "secondFieldNames": [
+        "id"
+      ],
+      "secondTableName": "clientes_ecossistema",
+      "secondSchemaName": "catalogo",
+      "secondRelation": "1",
+      "firstEndpointSide": "left",
+      "secondEndpointSide": "left",
+      "checkPoints": [
+        {
+          "x": -634.0890153418246,
+          "y": 2074.8375177966072
+        }
+      ]
+    },
+    {
+      "firstFieldNames": [
+        "email_id"
+      ],
+      "firstTableName": "cadastros_conta",
+      "firstSchemaName": "autenticacao",
+      "firstRelation": "*",
+      "secondFieldNames": [
+        "id"
+      ],
+      "secondTableName": "contatos_email",
+      "secondSchemaName": "identidade",
+      "secondRelation": "1",
+      "firstEndpointSide": "left",
+      "secondEndpointSide": "left",
+      "checkPoints": [
+        {
+          "x": -300.9635815486257,
+          "y": 2106.8375177966072
+        },
+        {
+          "x": -300.9635815486257,
+          "y": 2608.878067981669
+        }
+      ]
+    },
+    {
+      "firstFieldNames": [
+        "telefone_id"
+      ],
+      "firstTableName": "cadastros_conta",
+      "firstSchemaName": "autenticacao",
+      "firstRelation": "*",
+      "secondFieldNames": [
+        "id"
+      ],
+      "secondTableName": "contatos_telefone",
+      "secondSchemaName": "identidade",
+      "secondRelation": "1",
+      "checkPoints": []
+    },
+    {
+      "firstFieldNames": [
+        "cadastro_id"
+      ],
+      "firstTableName": "cadastros_conta_avatares",
+      "firstSchemaName": "autenticacao",
+      "firstRelation": "*",
+      "secondFieldNames": [
+        "id"
+      ],
+      "secondTableName": "cadastros_conta",
+      "secondSchemaName": "autenticacao",
+      "secondRelation": "1",
+      "checkPoints": [
+        {
+          "x": 1929.3906973763346,
+          "y": 1978.8375177966072
+        }
+      ]
+    },
+    {
+      "firstFieldNames": [
+        "origem_id"
+      ],
+      "firstTableName": "cadastros_conta_avatares",
+      "firstSchemaName": "autenticacao",
+      "firstRelation": "*",
+      "secondFieldNames": [
+        "id"
+      ],
+      "secondTableName": "avatar_origens",
+      "secondSchemaName": "identidade",
+      "secondRelation": "1",
+      "checkPoints": []
+    }
+  ]
+}

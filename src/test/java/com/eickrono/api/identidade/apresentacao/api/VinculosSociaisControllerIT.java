@@ -18,9 +18,7 @@ import com.eickrono.api.identidade.aplicacao.servico.AutenticacaoSessaoInternaSe
 import com.eickrono.api.identidade.dominio.modelo.FormaAcesso;
 import com.eickrono.api.identidade.dominio.modelo.ProvedorVinculoSocial;
 import com.eickrono.api.identidade.dominio.modelo.TipoFormaAcesso;
-import com.eickrono.api.identidade.dominio.modelo.VinculoSocial;
 import com.eickrono.api.identidade.dominio.repositorio.FormaAcessoRepositorio;
-import com.eickrono.api.identidade.dominio.repositorio.VinculoSocialRepositorio;
 import com.eickrono.api.identidade.support.ClienteAdministracaoCadastroKeycloakStubConfiguration;
 import com.eickrono.api.identidade.support.InfraestruturaTesteIdentidade;
 import java.util.List;
@@ -58,9 +56,6 @@ class VinculosSociaisControllerIT {
     private ClienteAdministracaoCadastroKeycloakStubConfiguration keycloakStub;
 
     @Autowired
-    private VinculoSocialRepositorio vinculoSocialRepositorio;
-
-    @Autowired
     private FormaAcessoRepositorio formaAcessoRepositorio;
 
     @MockBean
@@ -72,7 +67,6 @@ class VinculosSociaisControllerIT {
     @BeforeEach
     void limparEstado() {
         keycloakStub.limparIdentidadesFederadas();
-        vinculoSocialRepositorio.deleteAll();
         formaAcessoRepositorio.deleteAll();
     }
 
@@ -96,9 +90,6 @@ class VinculosSociaisControllerIT {
                 .andExpect(jsonPath("$.provedores[0].vinculado").value(true))
                 .andExpect(jsonPath("$.provedores[0].identificadorMascarado").value("t***@gmail.com"));
 
-        assertThat(vinculoSocialRepositorio.findAll())
-                .extracting(VinculoSocial::getProvedor, VinculoSocial::getIdentificador)
-                .containsExactly(org.assertj.core.groups.Tuple.tuple("google", "teste@gmail.com"));
         assertThat(formaAcessoRepositorio.findAll().stream()
                 .filter(forma -> forma.getTipo() == TipoFormaAcesso.SOCIAL)
                 .toList())
@@ -123,7 +114,6 @@ class VinculosSociaisControllerIT {
                 .andExpect(jsonPath("$.provedores[0].provedor").value("google"))
                 .andExpect(jsonPath("$.provedores[0].vinculado").value(false));
 
-        assertThat(vinculoSocialRepositorio.findAll()).isEmpty();
         assertThat(formaAcessoRepositorio.findAll().stream()
                 .filter(forma -> forma.getTipo() == TipoFormaAcesso.SOCIAL)
                 .toList()).isEmpty();
@@ -155,7 +145,9 @@ class VinculosSociaisControllerIT {
                 .andExpect(jsonPath("$.detalhes.provedor").value("google"))
                 .andExpect(jsonPath("$.detalhes.exigeReautenticacao").value(true));
 
-        assertThat(vinculoSocialRepositorio.findAll()).hasSize(1);
+        assertThat(formaAcessoRepositorio.findAll().stream()
+                .filter(forma -> forma.getTipo() == TipoFormaAcesso.SOCIAL)
+                .toList()).hasSize(1);
     }
 
     @Test
@@ -188,9 +180,6 @@ class VinculosSociaisControllerIT {
                 .andExpect(jsonPath("$.provedores[0].provedor").value("google"))
                 .andExpect(jsonPath("$.provedores[0].vinculado").value(false));
 
-        assertThat(vinculoSocialRepositorio.findAll())
-                .extracting(VinculoSocial::getProvedor)
-                .containsExactly("apple");
         assertThat(formaAcessoRepositorio.findAll().stream()
                 .filter(forma -> forma.getTipo() == TipoFormaAcesso.SOCIAL)
                 .toList())
@@ -227,7 +216,6 @@ class VinculosSociaisControllerIT {
                 .andExpect(jsonPath("$.codigo").value("senha_confirmacao_invalida"))
                 .andExpect(jsonPath("$.detalhes.exigeReautenticacao").value(true));
 
-        assertThat(vinculoSocialRepositorio.findAll()).hasSize(1);
         assertThat(formaAcessoRepositorio.findAll().stream()
                 .filter(forma -> forma.getTipo() == TipoFormaAcesso.SOCIAL)
                 .toList()).hasSize(1);
@@ -277,14 +265,42 @@ class VinculosSociaisControllerIT {
                 .andExpect(jsonPath("$.provedores[0].vinculado").value(true))
                 .andExpect(jsonPath("$.provedores[0].identificadorMascarado").value("t***@gmail.com"));
 
-        assertThat(vinculoSocialRepositorio.findAll())
-                .extracting(VinculoSocial::getProvedor, VinculoSocial::getIdentificador)
-                .containsExactly(org.assertj.core.groups.Tuple.tuple("google", "teste@gmail.com"));
         assertThat(formaAcessoRepositorio.findAll().stream()
                 .filter(forma -> forma.getTipo() == TipoFormaAcesso.SOCIAL)
                 .toList())
                 .extracting(FormaAcesso::getProvedor, FormaAcesso::getIdentificador)
                 .containsExactly(org.assertj.core.groups.Tuple.tuple("GOOGLE", "google-sub-1"));
+    }
+
+    @Test
+    void deveVincularRedeSocialConfirmadaPeloAliasDaContaUsadoPeloApp() throws Exception {
+        mockMvc.perform(post("/api/conta/redes-sociais/apple")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "aplicacaoId": "eickrono-thimisu-app",
+                                  "identificadorExterno": "apple-sub-1",
+                                  "nomeUsuarioExterno": "pedroso_tc",
+                                  "email": "pedroso_tc@hotmail.com",
+                                  "nomeCompleto": "Pedro Teste",
+                                  "urlAvatarExterno": "https://cdn.eickrono.test/apple.png",
+                                  "avatarPreferido": true
+                                }
+                                """)
+                        .with(jwtEscopo("vinculos:escrever")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.provedores[1].provedor").value("apple"))
+                .andExpect(jsonPath("$.provedores[1].vinculado").value(true))
+                .andExpect(jsonPath("$.provedores[1].identificadorMascarado").value("p***c"))
+                .andExpect(jsonPath("$.provedores[1].urlAvatarExterno")
+                        .value("https://cdn.eickrono.test/apple.png"))
+                .andExpect(jsonPath("$.provedores[1].avatarPrincipalNoProjeto").value(true));
+
+        assertThat(formaAcessoRepositorio.findAll().stream()
+                .filter(forma -> forma.getTipo() == TipoFormaAcesso.SOCIAL)
+                .toList())
+                .extracting(FormaAcesso::getProvedor, FormaAcesso::getIdentificador)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("APPLE", "apple-sub-1"));
     }
 
     @Test

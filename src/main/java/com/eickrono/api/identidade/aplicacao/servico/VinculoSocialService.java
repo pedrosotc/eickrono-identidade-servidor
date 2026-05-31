@@ -4,17 +4,14 @@ import com.eickrono.api.identidade.aplicacao.excecao.ApiAutenticadaException;
 import com.eickrono.api.identidade.aplicacao.modelo.IdentidadeFederadaKeycloak;
 import com.eickrono.api.identidade.aplicacao.modelo.ProjetoFluxoPublicoResolvido;
 import com.eickrono.api.identidade.aplicacao.modelo.SessaoInternaAutenticada;
+import com.eickrono.api.identidade.aplicacao.modelo.VinculoSocialConfirmadoCadastro;
 import com.eickrono.api.identidade.apresentacao.dto.AtualizarAvatarPreferidoApiRequest;
 import com.eickrono.api.identidade.apresentacao.dto.VinculosSociaisDto;
 import com.eickrono.api.identidade.dominio.modelo.FormaAcesso;
-import com.eickrono.api.identidade.dominio.modelo.PerfilIdentidade;
 import com.eickrono.api.identidade.dominio.modelo.Pessoa;
 import com.eickrono.api.identidade.dominio.modelo.ProvedorVinculoSocial;
 import com.eickrono.api.identidade.dominio.modelo.TipoFormaAcesso;
-import com.eickrono.api.identidade.dominio.modelo.VinculoSocial;
 import com.eickrono.api.identidade.dominio.repositorio.FormaAcessoRepositorio;
-import com.eickrono.api.identidade.dominio.repositorio.PerfilIdentidadeRepositorio;
-import com.eickrono.api.identidade.dominio.repositorio.VinculoSocialRepositorio;
 import com.eickrono.api.identidade.apresentacao.dto.VinculoSocialDto;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -25,7 +22,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
@@ -41,8 +37,6 @@ import static org.springframework.http.HttpStatus.BAD_REQUEST;
 @Service
 public class VinculoSocialService {
 
-    private final PerfilIdentidadeRepositorio perfilRepositorio;
-    private final VinculoSocialRepositorio vinculoRepositorio;
     private final FormaAcessoRepositorio formaAcessoRepositorio;
     private final AuditoriaService auditoriaService;
     private final ProvisionamentoIdentidadeService provisionamentoIdentidadeService;
@@ -50,24 +44,18 @@ public class VinculoSocialService {
     private final ClienteAdministracaoCadastroKeycloak clienteAdministracaoCadastroKeycloak;
     private final AutenticacaoSessaoInternaServico autenticacaoSessaoInternaServico;
     private final JwtDecoder jwtDecoder;
-    private final ContextoSocialPendenteJdbc contextoSocialPendenteJdbc;
     private final ResolvedorProjetoFluxoPublico resolvedorProjetoFluxoPublico;
     private final AvatarSocialProjetoJdbc avatarSocialProjetoJdbc;
 
-    public VinculoSocialService(PerfilIdentidadeRepositorio perfilRepositorio,
-                                VinculoSocialRepositorio vinculoRepositorio,
-                                FormaAcessoRepositorio formaAcessoRepositorio,
+    public VinculoSocialService(FormaAcessoRepositorio formaAcessoRepositorio,
                                 AuditoriaService auditoriaService,
                                 ProvisionamentoIdentidadeService provisionamentoIdentidadeService,
                                 ClienteAdministracaoVinculosSociaisKeycloak clienteAdministracaoVinculosSociaisKeycloak,
                                 ClienteAdministracaoCadastroKeycloak clienteAdministracaoCadastroKeycloak,
                                 AutenticacaoSessaoInternaServico autenticacaoSessaoInternaServico,
                                 JwtDecoder jwtDecoder,
-                                ContextoSocialPendenteJdbc contextoSocialPendenteJdbc,
                                 ResolvedorProjetoFluxoPublico resolvedorProjetoFluxoPublico,
                                 AvatarSocialProjetoJdbc avatarSocialProjetoJdbc) {
-        this.perfilRepositorio = perfilRepositorio;
-        this.vinculoRepositorio = vinculoRepositorio;
         this.formaAcessoRepositorio = formaAcessoRepositorio;
         this.auditoriaService = auditoriaService;
         this.provisionamentoIdentidadeService = provisionamentoIdentidadeService;
@@ -75,7 +63,6 @@ public class VinculoSocialService {
         this.clienteAdministracaoCadastroKeycloak = clienteAdministracaoCadastroKeycloak;
         this.autenticacaoSessaoInternaServico = autenticacaoSessaoInternaServico;
         this.jwtDecoder = jwtDecoder;
-        this.contextoSocialPendenteJdbc = contextoSocialPendenteJdbc;
         this.resolvedorProjetoFluxoPublico = resolvedorProjetoFluxoPublico;
         this.avatarSocialProjetoJdbc = avatarSocialProjetoJdbc;
     }
@@ -87,105 +74,24 @@ public class VinculoSocialService {
 
     @Transactional
     public VinculosSociaisDto listar(final Jwt jwt, final String aplicacaoId) {
-        PerfilIdentidade perfil = provisionarELocalizarPerfil(Objects.requireNonNull(jwt, "jwt é obrigatório"));
+        Pessoa pessoa = provisionamentoIdentidadeService.provisionarOuAtualizar(Objects.requireNonNull(jwt, "jwt é obrigatório"));
         return montarResposta(
-                vinculoRepositorio.findByPerfil(perfil),
-                formaAcessoRepositorio.findByPessoa(
-                        provisionamentoIdentidadeService.provisionarOuAtualizar(jwt)),
+                formaAcessoRepositorio.findByPessoa(pessoa),
                 resolverProjetoOpcional(aplicacaoId),
                 jwt.getSubject());
-    }
-
-    @Transactional
-    public void vincularContextoPendenteAposLoginLocal(
-            final String accessTokenLocal,
-            final ContextoSocialPendenteJdbc.ContextoSocialPendenteAtivo contextoSocialPendente,
-            final String aplicacaoId) {
-        String tokenLocal = Objects.requireNonNull(accessTokenLocal, "accessTokenLocal é obrigatório").trim();
-        if (tokenLocal.isEmpty()) {
-            throw new ResponseStatusException(BAD_REQUEST, "Access token local é obrigatório.");
-        }
-        Jwt jwtLocal;
-        try {
-            jwtLocal = jwtDecoder.decode(tokenLocal);
-        } catch (RuntimeException exception) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_GATEWAY,
-                    "Não foi possível validar a sessão local retornada pelo servidor de autorização.",
-                    exception
-            );
-        }
-        vincularContextoPendenteAposLoginLocal(jwtLocal, contextoSocialPendente, aplicacaoId);
-    }
-
-    @Transactional
-    public void vincularContextoPendenteAposLoginLocal(
-            final Jwt jwt,
-            final ContextoSocialPendenteJdbc.ContextoSocialPendenteAtivo contextoSocialPendente,
-            final String aplicacaoId) {
-        Jwt jwtLocal = Objects.requireNonNull(jwt, "jwt é obrigatório");
-        ContextoSocialPendenteJdbc.ContextoSocialPendenteAtivo contexto =
-                Objects.requireNonNull(contextoSocialPendente, "contextoSocialPendente é obrigatório");
-        if (!contexto.modoEntrarEVincular()) {
-            throw new ResponseStatusException(BAD_REQUEST, "Contexto social pendente incompatível com entrada e vínculo.");
-        }
-        ProvedorVinculoSocial provedor = validarProvedorNativo(contexto.provedor());
-        if (normalizarTexto(contexto.identificadorExterno(), contexto.nomeUsuarioExterno()) == null) {
-            throw new ResponseStatusException(BAD_REQUEST, "Contexto social pendente sem identificador externo.");
-        }
-
-        Pessoa pessoa = provisionamentoIdentidadeService.provisionarOuAtualizar(jwtLocal);
-        PerfilIdentidade perfil = localizarPerfil(jwtLocal.getSubject());
-        IdentidadeFederadaKeycloak identidadeFederada = new IdentidadeFederadaKeycloak(
-                provedor,
-                contexto.identificadorExterno(),
-                contexto.nomeUsuarioExterno(),
-                contexto.nomeExibicaoExterno(),
-                contexto.urlAvatarExterno());
-        validarConflitoVinculoSocial(pessoa, identidadeFederada);
-        clienteAdministracaoCadastroKeycloak.vincularIdentidadeFederada(jwtLocal.getSubject(), identidadeFederada);
-
-        OffsetDateTime instanteSincronizacao = OffsetDateTime.now();
-        List<IdentidadeFederadaKeycloak> identidadesFederadas = new ArrayList<>(
-                clienteAdministracaoVinculosSociaisKeycloak.listarIdentidadesFederadas(jwtLocal.getSubject()));
-        if (!contemIdentidadeFederada(identidadesFederadas, identidadeFederada)) {
-            identidadesFederadas.add(identidadeFederada);
-        }
-        identidadesFederadas = enriquecerIdentidadesFederadas(
-                identidadesFederadas,
-                provedor,
-                contexto.nomeExibicaoExterno(),
-                contexto.urlAvatarExterno());
-        reconciliarVinculosSociais(perfil, identidadesFederadas, instanteSincronizacao);
-        reconciliarFormasAcessoSociais(pessoa, identidadesFederadas, instanteSincronizacao);
-        sincronizarAvataresMultiapp(jwtLocal, pessoa, instanteSincronizacao, identidadesFederadas, aplicacaoId);
-        consumirContextoSocialPendenteSeCompativel(contexto.id(), pessoa);
-        auditoriaService.registrarEvento(
-                "VINCULO_SOCIAL_VINCULADO",
-                jwtLocal.getSubject(),
-                "Provedor=" + provedor.getAliasApi());
     }
 
     @Transactional
     public VinculosSociaisDto vincular(final Jwt jwt,
                                        final String aliasProvedor,
                                        final String tokenExterno) {
-        return vincular(jwt, aliasProvedor, tokenExterno, null, null, null, null);
+        return vincular(jwt, aliasProvedor, tokenExterno, null, null, null);
     }
 
     @Transactional
     public VinculosSociaisDto vincular(final Jwt jwt,
                                        final String aliasProvedor,
                                        final String tokenExterno,
-                                       final UUID contextoSocialPendenteId) {
-        return vincular(jwt, aliasProvedor, tokenExterno, contextoSocialPendenteId, null, null, null);
-    }
-
-    @Transactional
-    public VinculosSociaisDto vincular(final Jwt jwt,
-                                       final String aliasProvedor,
-                                       final String tokenExterno,
-                                       final UUID contextoSocialPendenteId,
                                        final String aplicacaoId,
                                        final String nomeExibicaoExterno,
                                        final String urlAvatarExterno) {
@@ -197,7 +103,6 @@ public class VinculoSocialService {
 
         Jwt jwtLocal = Objects.requireNonNull(jwt, "jwt é obrigatório");
         Pessoa pessoa = provisionamentoIdentidadeService.provisionarOuAtualizar(jwtLocal);
-        PerfilIdentidade perfil = localizarPerfil(jwtLocal.getSubject());
         IdentidadeFederadaKeycloak identidadeFederada = resolverIdentidadeFederadaNativa(
                 provedor,
                 tokenExternoNormalizado,
@@ -217,16 +122,68 @@ public class VinculoSocialService {
                 provedor,
                 identidadeFederada.nomeExibicaoExterno(),
                 identidadeFederada.urlAvatarExterno());
-        reconciliarVinculosSociais(perfil, identidadesFederadas, instanteSincronizacao);
         reconciliarFormasAcessoSociais(pessoa, identidadesFederadas, instanteSincronizacao);
         sincronizarAvataresMultiapp(jwtLocal, pessoa, instanteSincronizacao, identidadesFederadas, aplicacaoId);
-        consumirContextoSocialPendenteSeCompativel(contextoSocialPendenteId, pessoa);
         auditoriaService.registrarEvento(
                 "VINCULO_SOCIAL_VINCULADO",
                 jwtLocal.getSubject(),
                 "Provedor=" + provedor.getAliasApi());
         return montarResposta(
-                vinculoRepositorio.findByPerfil(perfil),
+                formaAcessoRepositorio.findByPessoa(pessoa),
+                resolverProjetoOpcional(aplicacaoId),
+                jwtLocal.getSubject());
+    }
+
+    @Transactional
+    public VinculosSociaisDto vincularConfirmado(final Jwt jwt,
+                                                 final String aliasProvedor,
+                                                 final VinculoSocialConfirmadoCadastro vinculoSocialConfirmado,
+                                                 final String aplicacaoId) {
+        ProvedorVinculoSocial provedor = validarProvedor(aliasProvedor);
+        VinculoSocialConfirmadoCadastro vinculo = Objects.requireNonNull(
+                vinculoSocialConfirmado,
+                "vinculoSocialConfirmado é obrigatório");
+        String identificadorExterno = normalizarTexto(vinculo.identificadorExterno());
+        if (identificadorExterno == null) {
+            throw new ResponseStatusException(BAD_REQUEST, "Identificador social externo é obrigatório.");
+        }
+
+        Jwt jwtLocal = Objects.requireNonNull(jwt, "jwt é obrigatório");
+        Pessoa pessoa = provisionamentoIdentidadeService.provisionarOuAtualizar(jwtLocal);
+        IdentidadeFederadaKeycloak identidadeFederada = new IdentidadeFederadaKeycloak(
+                provedor,
+                identificadorExterno,
+                normalizarTexto(vinculo.nomeUsuarioExterno()),
+                normalizarTexto(vinculo.nomeCompleto()),
+                normalizarTexto(vinculo.urlAvatarExterno()));
+        validarConflitoVinculoSocial(pessoa, identidadeFederada);
+        clienteAdministracaoCadastroKeycloak.vincularIdentidadeFederada(jwtLocal.getSubject(), identidadeFederada);
+
+        OffsetDateTime instanteSincronizacao = OffsetDateTime.now();
+        List<IdentidadeFederadaKeycloak> identidadesFederadas = new ArrayList<>(
+                clienteAdministracaoVinculosSociaisKeycloak.listarIdentidadesFederadas(jwtLocal.getSubject()));
+        if (!contemIdentidadeFederada(identidadesFederadas, identidadeFederada)) {
+            identidadesFederadas.add(identidadeFederada);
+        }
+        identidadesFederadas = enriquecerIdentidadesFederadas(
+                identidadesFederadas,
+                provedor,
+                identidadeFederada.nomeExibicaoExterno(),
+                identidadeFederada.urlAvatarExterno());
+        reconciliarFormasAcessoSociais(pessoa, identidadesFederadas, instanteSincronizacao);
+        sincronizarAvataresMultiapp(jwtLocal, pessoa, instanteSincronizacao, identidadesFederadas, aplicacaoId);
+        if (vinculo.avatarPreferido() && normalizarTexto(vinculo.urlAvatarExterno()) != null) {
+            resolverProjetoOpcional(aplicacaoId).ifPresent(projeto -> avatarSocialProjetoJdbc.definirAvatarSocial(
+                    jwtLocal.getSubject(),
+                    projeto.clienteEcossistemaId(),
+                    provedor,
+                    instanteSincronizacao));
+        }
+        auditoriaService.registrarEvento(
+                "VINCULO_SOCIAL_VINCULADO",
+                jwtLocal.getSubject(),
+                "Provedor=" + provedor.getAliasApi());
+        return montarResposta(
                 formaAcessoRepositorio.findByPessoa(pessoa),
                 resolverProjetoOpcional(aplicacaoId),
                 jwtLocal.getSubject());
@@ -234,37 +191,25 @@ public class VinculoSocialService {
 
     @Transactional
     public VinculosSociaisDto sincronizar(final Jwt jwt, final String aliasProvedor) {
-        return sincronizar(jwt, aliasProvedor, null, null);
+        return sincronizar(jwt, aliasProvedor, null);
     }
 
     @Transactional
     public VinculosSociaisDto sincronizar(final Jwt jwt,
                                           final String aliasProvedor,
-                                          final UUID contextoSocialPendenteId) {
-        return sincronizar(jwt, aliasProvedor, contextoSocialPendenteId, null);
-    }
-
-    @Transactional
-    public VinculosSociaisDto sincronizar(final Jwt jwt,
-                                          final String aliasProvedor,
-                                          final UUID contextoSocialPendenteId,
                                           final String aplicacaoId) {
         ProvedorVinculoSocial provedor = validarProvedor(aliasProvedor);
         Pessoa pessoa = provisionamentoIdentidadeService.provisionarOuAtualizar(Objects.requireNonNull(jwt, "jwt é obrigatório"));
-        PerfilIdentidade perfil = localizarPerfil(jwt.getSubject());
         OffsetDateTime instanteSincronizacao = OffsetDateTime.now();
         List<IdentidadeFederadaKeycloak> identidadesFederadas = clienteAdministracaoVinculosSociaisKeycloak
                 .listarIdentidadesFederadas(jwt.getSubject());
-        reconciliarVinculosSociais(perfil, identidadesFederadas, instanteSincronizacao);
         reconciliarFormasAcessoSociais(pessoa, identidadesFederadas, instanteSincronizacao);
         sincronizarAvataresMultiapp(jwt, pessoa, instanteSincronizacao, identidadesFederadas, aplicacaoId);
-        consumirContextoSocialPendenteSeCompativel(contextoSocialPendenteId, pessoa);
         auditoriaService.registrarEvento(
                 "VINCULO_SOCIAL_SINCRONIZADO",
                 jwt.getSubject(),
                 "Provedor=" + provedor.getAliasApi() + ", vinculado=" + estaVinculado(identidadesFederadas, provedor));
         return montarResposta(
-                vinculoRepositorio.findByPerfil(perfil),
                 formaAcessoRepositorio.findByPessoa(pessoa),
                 resolverProjetoOpcional(aplicacaoId),
                 jwt.getSubject());
@@ -283,7 +228,6 @@ public class VinculoSocialService {
         ProvedorVinculoSocial provedor = validarProvedor(aliasProvedor);
         Objects.requireNonNull(jwt, "jwt é obrigatório");
         Pessoa pessoa = provisionamentoIdentidadeService.provisionarOuAtualizar(jwt);
-        PerfilIdentidade perfil = localizarPerfil(jwt.getSubject());
         if (exigeReautenticacaoPorSenhaNaRemocao(pessoa, provedor)) {
             confirmarReautenticacaoPorSenha(pessoa, provedor, senhaConfirmacao);
         }
@@ -291,13 +235,11 @@ public class VinculoSocialService {
         clienteAdministracaoVinculosSociaisKeycloak.removerIdentidadeFederada(jwt.getSubject(), provedor);
         List<IdentidadeFederadaKeycloak> identidadesFederadas = clienteAdministracaoVinculosSociaisKeycloak
                 .listarIdentidadesFederadas(jwt.getSubject());
-        reconciliarVinculosSociais(perfil, identidadesFederadas, instanteSincronizacao);
         reconciliarFormasAcessoSociais(pessoa, identidadesFederadas, instanteSincronizacao);
         sincronizarAvataresMultiapp(jwt, pessoa, instanteSincronizacao, identidadesFederadas, aplicacaoId);
         auditoriaService.registrarEvento("VINCULO_SOCIAL_REMOVIDO", jwt.getSubject(),
                 "Provedor=" + provedor.getAliasApi());
         return montarResposta(
-                vinculoRepositorio.findByPerfil(perfil),
                 formaAcessoRepositorio.findByPessoa(pessoa),
                 resolverProjetoOpcional(aplicacaoId),
                 jwt.getSubject());
@@ -335,9 +277,7 @@ public class VinculoSocialService {
             );
         }
         Pessoa pessoa = provisionamentoIdentidadeService.provisionarOuAtualizar(jwt);
-        PerfilIdentidade perfil = localizarPerfil(jwt.getSubject());
         return montarResposta(
-                vinculoRepositorio.findByPerfil(perfil),
                 formaAcessoRepositorio.findByPessoa(pessoa),
                 Optional.of(projeto),
                 jwt.getSubject());
@@ -423,10 +363,6 @@ public class VinculoSocialService {
         }
     }
 
-    private PerfilIdentidade provisionarELocalizarPerfil(Jwt jwt) {
-        provisionamentoIdentidadeService.provisionarOuAtualizar(jwt);
-        return localizarPerfil(jwt.getSubject());
-    }
 
     private IdentidadeFederadaKeycloak resolverIdentidadeFederadaNativa(final ProvedorVinculoSocial provedor,
                                                                         final String tokenExterno,
@@ -493,64 +429,6 @@ public class VinculoSocialService {
         }
     }
 
-    private PerfilIdentidade localizarPerfil(String sub) {
-        return perfilRepositorio.findBySub(sub)
-                .orElseThrow(() -> new IllegalArgumentException("Perfil não encontrado para o usuário informado"));
-    }
-
-    private void consumirContextoSocialPendenteSeCompativel(final UUID contextoSocialPendenteId,
-                                                            final Pessoa pessoa) {
-        if (contextoSocialPendenteId == null || pessoa == null) {
-            return;
-        }
-        contextoSocialPendenteJdbc.consumirSeCompativel(contextoSocialPendenteId, pessoa.getEmail());
-    }
-
-    private void reconciliarVinculosSociais(final PerfilIdentidade perfil,
-                                            final List<IdentidadeFederadaKeycloak> identidadesFederadas,
-                                            final OffsetDateTime instanteSincronizacao) {
-        Map<ProvedorVinculoSocial, VinculoSocial> existentes = vinculoRepositorio.findByPerfil(perfil).stream()
-                .filter(vinculo -> resolverProvedor(vinculo.getProvedor()).isPresent())
-                .collect(LinkedHashMap::new,
-                        (mapa, vinculo) -> resolverProvedor(vinculo.getProvedor())
-                                .ifPresent(provedor -> mapa.put(provedor, vinculo)),
-                        Map::putAll);
-        Map<ProvedorVinculoSocial, IdentidadeFederadaKeycloak> remotos = indexarPorProvedor(identidadesFederadas);
-
-        for (ProvedorVinculoSocial provedor : ProvedorVinculoSocial.values()) {
-            IdentidadeFederadaKeycloak identidadeFederada = remotos.get(provedor);
-            VinculoSocial existente = existentes.get(provedor);
-            if (identidadeFederada == null) {
-                continue;
-            }
-            String identificadorExibicao = identidadeFederada.identificadorExibicao();
-            if (existente == null) {
-                vinculoRepositorio.save(new VinculoSocial(
-                        perfil,
-                        provedor.getAliasApi(),
-                        identificadorExibicao,
-                        instanteSincronizacao,
-                        identidadeFederada.nomeExibicaoExterno(),
-                        identidadeFederada.urlAvatarExterno(),
-                        identidadeFederada.urlAvatarExterno() == null ? null : instanteSincronizacao));
-                continue;
-            }
-            existente.atualizarIdentificador(identificadorExibicao);
-            existente.atualizarDadosExternos(
-                    identidadeFederada.nomeExibicaoExterno(),
-                    identidadeFederada.urlAvatarExterno(),
-                    instanteSincronizacao);
-            vinculoRepositorio.save(existente);
-        }
-
-        List<VinculoSocial> obsoletos = existentes.entrySet().stream()
-                .filter(entry -> !remotos.containsKey(entry.getKey()))
-                .map(Map.Entry::getValue)
-                .toList();
-        if (!obsoletos.isEmpty()) {
-            vinculoRepositorio.deleteAll(obsoletos);
-        }
-    }
 
     private void reconciliarFormasAcessoSociais(final Pessoa pessoa,
                                                 final List<IdentidadeFederadaKeycloak> identidadesFederadas,
@@ -618,16 +496,9 @@ public class VinculoSocialService {
         return remotos;
     }
 
-    private VinculosSociaisDto montarResposta(final List<VinculoSocial> vinculosPersistidos,
-                                              final List<FormaAcesso> formasAcessoPersistidas,
+    private VinculosSociaisDto montarResposta(final List<FormaAcesso> formasAcessoPersistidas,
                                               final Optional<ProjetoFluxoPublicoResolvido> projeto,
                                               final String subjectRemoto) {
-        Map<ProvedorVinculoSocial, VinculoSocial> vinculosPorProvedor = vinculosPersistidos.stream()
-                .filter(vinculo -> resolverProvedor(vinculo.getProvedor()).isPresent())
-                .collect(LinkedHashMap::new,
-                        (mapa, vinculo) -> resolverProvedor(vinculo.getProvedor())
-                                .ifPresent(provedor -> mapa.put(provedor, vinculo)),
-                        Map::putAll);
         Map<ProvedorVinculoSocial, FormaAcesso> formasPorProvedor = formasAcessoPersistidas.stream()
                 .filter(forma -> forma.getTipo() == TipoFormaAcesso.SOCIAL)
                 .filter(forma -> resolverProvedor(forma.getProvedor()).isPresent())
@@ -640,15 +511,14 @@ public class VinculoSocialService {
                 .orElseGet(AvatarSocialProjetoJdbc.PreferenciaAvatarProjeto::vazia);
         List<VinculoSocialDto> provedores = Arrays.stream(ProvedorVinculoSocial.values())
                 .map(provedor -> {
-                    VinculoSocial vinculo = vinculosPorProvedor.get(provedor);
                     FormaAcesso forma = formasPorProvedor.get(provedor);
-                    DiagnosticoAvatarSocial diagnosticoAvatar = diagnosticarAvatarSocial(provedor, vinculo, forma);
+                    DiagnosticoAvatarSocial diagnosticoAvatar = diagnosticarAvatarSocial(provedor, forma);
                     return new VinculoSocialDto(
                             provedor.getAliasApi(),
                             true,
-                            vinculo != null,
-                            vinculo == null ? null : vinculo.getVinculadoEm(),
-                            vinculo == null ? null : mascararIdentificador(vinculo.getIdentificador()),
+                            forma != null,
+                            forma == null ? null : forma.getVerificadoEm(),
+                            forma == null ? null : mascararIdentificador(forma.getIdentificador()),
                             forma == null ? null : forma.getNomeExibicaoExterno(),
                             forma == null ? null : forma.getUrlAvatarExterno(),
                             forma == null ? null : forma.getAvatarExternoAtualizadoEm(),
@@ -664,9 +534,8 @@ public class VinculoSocialService {
     }
 
     private DiagnosticoAvatarSocial diagnosticarAvatarSocial(final ProvedorVinculoSocial provedor,
-                                                             final VinculoSocial vinculo,
                                                              final FormaAcesso forma) {
-        if (vinculo == null) {
+        if (forma == null) {
             return DiagnosticoAvatarSocial.vazio();
         }
         if (!provedor.suportaAvatarPerfil()) {
@@ -725,8 +594,8 @@ public class VinculoSocialService {
     private boolean contemIdentidadeFederada(final List<IdentidadeFederadaKeycloak> identidadesFederadas,
                                              final IdentidadeFederadaKeycloak identidadeFederada) {
         return identidadesFederadas.stream()
-                .anyMatch(identidade -> identidade.provedor() == identidadeFederada.provedor()
-                        && Objects.equals(identidade.identificadorCanonico(), identidadeFederada.identificadorCanonico()));
+                .anyMatch(atual -> atual.provedor() == identidadeFederada.provedor()
+                        && Objects.equals(atual.identificadorCanonico(), identidadeFederada.identificadorCanonico()));
     }
 
     private String mascararIdentificador(final String identificador) {

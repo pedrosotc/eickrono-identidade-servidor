@@ -1,38 +1,41 @@
 package com.eickrono.api.identidade.apresentacao.api;
 
+import java.time.OffsetDateTime;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
 import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import static org.mockito.Mockito.when;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.ContextConfiguration;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.eickrono.api.identidade.dominio.modelo.CanalVerificacao;
-import com.eickrono.api.identidade.dominio.modelo.CanalValidacaoTelefoneCadastro;
-import com.eickrono.api.identidade.dominio.modelo.CadastroConta;
-import com.eickrono.api.identidade.dominio.modelo.EventoOfflineDispositivo;
-import com.eickrono.api.identidade.dominio.modelo.FormaAcesso;
-import com.eickrono.api.identidade.dominio.modelo.MotivoRevogacaoToken;
-import com.eickrono.api.identidade.dominio.modelo.PerfilIdentidade;
-import com.eickrono.api.identidade.dominio.modelo.Pessoa;
-import com.eickrono.api.identidade.dominio.modelo.ProvedorVinculoSocial;
-import com.eickrono.api.identidade.dominio.modelo.SexoPessoaCadastro;
-import com.eickrono.api.identidade.dominio.modelo.ConviteOrganizacional;
-import com.eickrono.api.identidade.dominio.modelo.StatusConviteOrganizacional;
-import com.eickrono.api.identidade.dominio.modelo.TipoEventoOfflineDispositivo;
-import com.eickrono.api.identidade.dominio.modelo.TipoFormaAcesso;
-import com.eickrono.api.identidade.dominio.modelo.TipoPessoaCadastro;
-import com.eickrono.api.identidade.dominio.modelo.VinculoOrganizacional;
-import com.eickrono.api.identidade.dominio.modelo.VinculoSocial;
 import com.eickrono.api.identidade.AplicacaoApiIdentidade;
 import com.eickrono.api.identidade.aplicacao.modelo.CadastroInternoRealizado;
-import com.eickrono.api.identidade.aplicacao.modelo.ConfirmacaoEmailCadastroPublicoRealizada;
-import com.eickrono.api.identidade.aplicacao.modelo.ConviteOrganizacionalValidado;
 import com.eickrono.api.identidade.aplicacao.modelo.ContextoPessoaPerfilSistema;
+import com.eickrono.api.identidade.aplicacao.modelo.ConviteOrganizacionalValidado;
 import com.eickrono.api.identidade.aplicacao.modelo.IdentidadeFederadaKeycloak;
 import com.eickrono.api.identidade.aplicacao.modelo.ProvisionamentoPerfilSistemaRealizado;
-import com.eickrono.api.identidade.aplicacao.modelo.VinculoSocialPendenteCadastro;
 import com.eickrono.api.identidade.aplicacao.servico.CadastroContaInternaServico;
 import com.eickrono.api.identidade.aplicacao.servico.CanalEnvioCodigoCadastroEmail;
 import com.eickrono.api.identidade.aplicacao.servico.CanalEnvioCodigoCadastroTelefone;
@@ -41,10 +44,28 @@ import com.eickrono.api.identidade.aplicacao.servico.ClienteContextoPessoaPerfil
 import com.eickrono.api.identidade.aplicacao.servico.ConsultadorDisponibilidadeUsuarioSistemaServico;
 import com.eickrono.api.identidade.aplicacao.servico.ProvisionadorPerfilSistemaServico;
 import com.eickrono.api.identidade.aplicacao.servico.SincronizacaoModeloMultiappService;
-import com.eickrono.api.identidade.support.ClienteAdministracaoCadastroKeycloakStubConfiguration;
-import com.eickrono.api.identidade.support.InfraestruturaTesteIdentidade;
+import com.eickrono.api.identidade.apresentacao.dto.ConfirmacaoRegistroResponse;
+import com.eickrono.api.identidade.apresentacao.dto.PoliticaOfflineDispositivoResponse;
+import com.eickrono.api.identidade.apresentacao.dto.RegistroDispositivoResponse;
+import com.eickrono.api.identidade.apresentacao.dto.RegistroDispositivoSessaoResponse;
+import com.eickrono.api.identidade.apresentacao.dto.ValidacaoTokenDispositivoResponse;
+import com.eickrono.api.identidade.dominio.modelo.CadastroConta;
+import com.eickrono.api.identidade.dominio.modelo.CanalValidacaoTelefoneCadastro;
+import com.eickrono.api.identidade.dominio.modelo.CanalVerificacao;
+import com.eickrono.api.identidade.dominio.modelo.ConviteOrganizacional;
+import com.eickrono.api.identidade.dominio.modelo.EventoOfflineDispositivo;
+import com.eickrono.api.identidade.dominio.modelo.FormaAcesso;
+import com.eickrono.api.identidade.dominio.modelo.MotivoRevogacaoToken;
+import com.eickrono.api.identidade.dominio.modelo.Pessoa;
+import com.eickrono.api.identidade.dominio.modelo.ProvedorVinculoSocial;
+import com.eickrono.api.identidade.dominio.modelo.SexoPessoaCadastro;
+import com.eickrono.api.identidade.dominio.modelo.StatusConviteOrganizacional;
 import com.eickrono.api.identidade.dominio.modelo.StatusRegistroDispositivo;
+import com.eickrono.api.identidade.dominio.modelo.TipoEventoOfflineDispositivo;
+import com.eickrono.api.identidade.dominio.modelo.TipoFormaAcesso;
+import com.eickrono.api.identidade.dominio.modelo.TipoPessoaCadastro;
 import com.eickrono.api.identidade.dominio.modelo.TokenDispositivo;
+import com.eickrono.api.identidade.dominio.modelo.VinculoOrganizacional;
 import com.eickrono.api.identidade.dominio.repositorio.CadastroContaRepositorio;
 import com.eickrono.api.identidade.dominio.repositorio.ConviteOrganizacionalRepositorio;
 import com.eickrono.api.identidade.dominio.repositorio.EventoOfflineDispositivoRepositorio;
@@ -53,34 +74,9 @@ import com.eickrono.api.identidade.dominio.repositorio.PerfilIdentidadeRepositor
 import com.eickrono.api.identidade.dominio.repositorio.PessoaRepositorio;
 import com.eickrono.api.identidade.dominio.repositorio.TokenDispositivoRepositorio;
 import com.eickrono.api.identidade.dominio.repositorio.VinculoOrganizacionalRepositorio;
-import com.eickrono.api.identidade.dominio.repositorio.VinculoSocialRepositorio;
-import com.eickrono.api.identidade.apresentacao.dto.ConfirmacaoRegistroResponse;
-import com.eickrono.api.identidade.apresentacao.dto.PoliticaOfflineDispositivoResponse;
-import com.eickrono.api.identidade.apresentacao.dto.RegistroDispositivoResponse;
-import com.eickrono.api.identidade.apresentacao.dto.RegistroDispositivoSessaoResponse;
-import com.eickrono.api.identidade.apresentacao.dto.ValidacaoTokenDispositivoResponse;
+import com.eickrono.api.identidade.support.ClienteAdministracaoCadastroKeycloakStubConfiguration;
+import com.eickrono.api.identidade.support.InfraestruturaTesteIdentidade;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.time.OffsetDateTime;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.BeforeEach;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Import;
-import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.http.MediaType;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.ContextConfiguration;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.MvcResult;
-import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 @SpringBootTest(classes = {
         AplicacaoApiIdentidade.class,
@@ -130,9 +126,6 @@ class RegistroDispositivoControllerIT {
     private PerfilIdentidadeRepositorio perfilIdentidadeRepositorio;
 
     @Autowired
-    private VinculoSocialRepositorio vinculoSocialRepositorio;
-
-    @Autowired
     private ConviteOrganizacionalRepositorio conviteOrganizacionalRepositorio;
 
     @Autowired
@@ -166,26 +159,9 @@ class RegistroDispositivoControllerIT {
     private final Map<UUID, String> codigosCadastroTelefone = new ConcurrentHashMap<>();
 
     @BeforeEach
-    void setUp() {
+    public void setUp() {
         tokenDispositivoRepositorio().deleteAll();
         eventoOfflineDispositivoRepositorio().deleteAll();
-        vinculoSocialRepositorio.deleteAll();
-        jdbcTemplate.update(
-                """
-                DELETE FROM autenticacao.contextos_sociais_pendentes
-                 WHERE usuario_id_sugerido IN (
-                           SELECT id
-                             FROM autenticacao.usuarios
-                            WHERE sub_remoto = ?
-                       )
-                    OR login_sugerido = ?
-                    OR email_social_normalizado = ?
-                """,
-                SUB_CONTA_PROJETO_ATUAL,
-                EMAIL_CONTA_PROJETO_ATUAL,
-                EMAIL_CONTA_PROJETO_ATUAL
-        );
-        jdbcTemplate.update("DELETE FROM autenticacao.contextos_sociais_pendentes");
         jdbcTemplate.update(
                 "DELETE FROM autenticacao.usuarios_formas_acesso WHERE identificador_externo = ?",
                 EMAIL_CONTA_PROJETO_ATUAL
@@ -417,110 +393,6 @@ class RegistroDispositivoControllerIT {
     }
 
     @Test
-    void devePermitirPrimeiroLoginSocialAposConfirmacaoDoCadastroPublicoVinculado() throws Exception {
-        CadastroInternoRealizado cadastro = cadastroContaInternaServico.cadastrarPublico(
-                TipoPessoaCadastro.FISICA,
-                "Ana Souza",
-                null,
-                "ana.souza",
-                SexoPessoaCadastro.FEMININO,
-                "BR",
-                java.time.LocalDate.parse("1990-05-10"),
-                "ana@eickrono.com",
-                "+5511999999999",
-                CanalValidacaoTelefoneCadastro.SMS,
-                "SenhaForte@123",
-                new VinculoSocialPendenteCadastro(
-                        ProvedorVinculoSocial.GOOGLE,
-                        "google-user-123",
-                        "ana.google"
-                ),
-                "eickrono-thimisu-app",
-                "app-flutter-publico",
-                "127.0.0.1",
-                "JUnit"
-        );
-        String codigo = Optional.ofNullable(codigosCadastroEmail.get(cadastro.cadastroId()))
-                .orElseThrow(() -> new IllegalStateException("Codigo de cadastro nao capturado"));
-        Pessoa pessoaPendente = pessoaRepositorio.findBySub(cadastro.subjectRemoto())
-                .orElseThrow(() -> new IllegalStateException("Pessoa pendente nao encontrada"));
-        when(provisionadorPerfilSistemaServico.provisionarCadastroConfirmado(
-                org.mockito.ArgumentMatchers.any(CadastroConta.class),
-                org.mockito.ArgumentMatchers.eq(pessoaPendente.getId())))
-                .thenReturn(new ProvisionamentoPerfilSistemaRealizado(
-                        "usuario-ana-001",
-                        "ATIVO"
-                ));
-
-        ConfirmacaoEmailCadastroPublicoRealizada confirmacao =
-                cadastroContaInternaServico.confirmarEmailPublico(cadastro.cadastroId(), codigo, null);
-
-        CadastroConta cadastroPersistido = cadastroContaRepositorio.findByCadastroId(cadastro.cadastroId())
-                .orElseThrow(() -> new IllegalStateException("Cadastro nao persistido"));
-        Pessoa pessoa = pessoaRepositorio.findById(cadastroPersistido.getPessoaIdPerfil())
-                .orElseThrow(() -> new IllegalStateException("Pessoa nao provisionada"));
-        PerfilIdentidade perfil = perfilIdentidadeRepositorio.findBySub(confirmacao.subjectRemoto())
-                .orElseThrow(() -> new IllegalStateException("Perfil nao provisionado"));
-
-        assertThat(formaAcessoRepositorio.findByPessoa(pessoa))
-                .extracting(FormaAcesso::getTipo, FormaAcesso::getProvedor, FormaAcesso::getIdentificador)
-                .contains(org.assertj.core.groups.Tuple.tuple(
-                        TipoFormaAcesso.SOCIAL,
-                        "GOOGLE",
-                        "google-user-123"
-                ));
-        assertThat(vinculoSocialRepositorio.findByPerfil(perfil))
-                .extracting(VinculoSocial::getProvedor, VinculoSocial::getIdentificador)
-                .contains(org.assertj.core.groups.Tuple.tuple("google", "ana.google"));
-
-        when(clienteContextoPessoaPerfilSistema.buscarPorSub("social-google-sub-1"))
-                .thenReturn(Optional.empty());
-        when(clienteContextoPessoaPerfilSistema.buscarPorPessoaId(pessoa.getId()))
-                .thenReturn(Optional.of(new ContextoPessoaPerfilSistema(
-                        pessoa.getId(),
-                        pessoa.getSub(),
-                        pessoa.getEmail(),
-                        pessoa.getNome(),
-                        confirmacao.perfilSistemaId(),
-                        confirmacao.statusPerfilSistema()
-                )));
-        clienteAdministracaoCadastroKeycloakStub.definirIdentidadesFederadas(
-                "social-google-sub-1",
-                java.util.List.of(new IdentidadeFederadaKeycloak(
-                        ProvedorVinculoSocial.GOOGLE,
-                        "google-user-123",
-                        "ana.google"
-                ))
-        );
-
-        MvcResult resultado = mockMvc().perform(post(REGISTRO_ENDPOINT + "/silencioso")
-                        .with(Objects.requireNonNull(clienteJwt("social-google-sub-1", "ana@eickrono.com", "Ana Souza")))
-                        .contentType(Objects.requireNonNull(jsonMediaType()))
-                        .content("""
-                                {
-                                  "plataforma": "IOS",
-                                  "aplicacaoId": "eickrono-thimisu-app",
-                                  "identificadorInstalacao": "instalacao-social-confirmado-1",
-                                  "modelo": "iPhone15,2",
-                                  "fabricante": "Apple",
-                                  "sistemaOperacional": "iOS",
-                                  "versaoSistema": "iOS 18.0",
-                                  "versaoApp": "1.2.3+45"
-                                }
-                                """))
-                .andExpect(status().isOk())
-                .andReturn();
-
-        RegistroDispositivoSessaoResponse resposta = objectMapper().readValue(
-                resultado.getResponse().getContentAsByteArray(),
-                RegistroDispositivoSessaoResponse.class
-        );
-
-        assertThat(resposta.tokenDispositivo()).isNotBlank();
-        assertThat(resposta.tokenDispositivoExpiraEm()).isNotNull();
-    }
-
-    @Test
     void deveConsumirConviteERegistrarVinculoOrganizacionalAoConfirmarCadastroPublico() throws Exception {
         conviteOrganizacionalRepositorio.save(new ConviteOrganizacional(
                 "ORG-ACME-2026",
@@ -543,7 +415,6 @@ class RegistroDispositivoControllerIT {
                 "+5511999999999",
                 CanalValidacaoTelefoneCadastro.SMS,
                 "SenhaForte@123",
-                null,
                 new ConviteOrganizacionalValidado(
                         "ORG-ACME-2026",
                         "org-acme",
@@ -598,7 +469,7 @@ class RegistroDispositivoControllerIT {
                 ))
         );
 
-        String resposta = mockMvc().perform(post(REGISTRO_ENDPOINT + "/silencioso")
+        mockMvc().perform(post(REGISTRO_ENDPOINT + "/silencioso")
                         .with(Objects.requireNonNull(clienteJwt(
                                 "usuario-xyz",
                                 "social.sem.conta.local@eickrono.com",
@@ -624,26 +495,7 @@ class RegistroDispositivoControllerIT {
                 .andExpect(jsonPath("$.detalhes.acaoSugerida").value("ABRIR_CADASTRO"))
                 .andExpect(jsonPath("$.detalhes.provedor").value("google"))
                 .andExpect(jsonPath("$.detalhes.identificadorExterno").value("google-user-123"))
-                .andExpect(jsonPath("$.detalhes.nomeUsuarioExterno").value("ana.google"))
-                .andExpect(jsonPath("$.detalhes.contextoSocialPendenteId").isNotEmpty())
-                .andReturn()
-                .getResponse()
-                .getContentAsString();
-
-        String contextoId = objectMapper.readTree(resposta)
-                .path("detalhes")
-                .path("contextoSocialPendenteId")
-                .asText();
-        Map<String, Object> contextoPersistido = jdbcTemplate.queryForMap("""
-                SELECT modo_pendente,
-                       usuario_id_sugerido,
-                       email_social_normalizado
-                  FROM autenticacao.contextos_sociais_pendentes
-                 WHERE id = ?::uuid
-                """, contextoId);
-        assertThat(contextoPersistido.get("modo_pendente")).isEqualTo("ABRIR_CADASTRO");
-        assertThat(contextoPersistido.get("usuario_id_sugerido")).isNull();
-        assertThat(contextoPersistido.get("email_social_normalizado")).isEqualTo("social.sem.conta.local@eickrono.com");
+                .andExpect(jsonPath("$.detalhes.nomeUsuarioExterno").value("ana.google"));
     }
 
     @Test
@@ -718,7 +570,7 @@ class RegistroDispositivoControllerIT {
                 ))
         );
 
-        String resposta = mockMvc().perform(post(REGISTRO_ENDPOINT + "/silencioso")
+        mockMvc().perform(post(REGISTRO_ENDPOINT + "/silencioso")
                         .with(Objects.requireNonNull(clienteJwt(
                                 "usuario-sem-conta-local",
                                 EMAIL_CONTA_PROJETO_ATUAL,
@@ -747,28 +599,7 @@ class RegistroDispositivoControllerIT {
                 .andExpect(jsonPath("$.detalhes.emailContaExistente").value(EMAIL_CONTA_PROJETO_ATUAL))
                 .andExpect(jsonPath("$.detalhes.provedor").value("google"))
                 .andExpect(jsonPath("$.detalhes.identificadorExterno").value("google-user-123"))
-                .andExpect(jsonPath("$.detalhes.nomeUsuarioExterno").value("ana.google"))
-                .andExpect(jsonPath("$.detalhes.contextoSocialPendenteId").isNotEmpty())
-                .andReturn()
-                .getResponse()
-                .getContentAsString();
-
-        String contextoId = objectMapper.readTree(resposta)
-                .path("detalhes")
-                .path("contextoSocialPendenteId")
-                .asText();
-        Map<String, Object> contextoPersistido = jdbcTemplate.queryForMap("""
-                SELECT modo_pendente,
-                       usuario_id_sugerido,
-                       login_sugerido,
-                       email_social_normalizado
-                  FROM autenticacao.contextos_sociais_pendentes
-                 WHERE id = ?::uuid
-                """, contextoId);
-        assertThat(contextoPersistido.get("modo_pendente")).isEqualTo("ENTRAR_E_VINCULAR");
-        assertThat(contextoPersistido.get("usuario_id_sugerido")).isNotNull();
-        assertThat(contextoPersistido.get("login_sugerido")).isEqualTo(EMAIL_CONTA_PROJETO_ATUAL);
-        assertThat(contextoPersistido.get("email_social_normalizado")).isEqualTo(EMAIL_CONTA_PROJETO_ATUAL);
+                .andExpect(jsonPath("$.detalhes.nomeUsuarioExterno").value("ana.google"));
     }
 
     @Test
@@ -808,6 +639,7 @@ class RegistroDispositivoControllerIT {
                 .andExpect(jsonPath("$.detalhes.acaoSugerida").value("SUPORTE"));
     }
 
+    @Test
     void deveBloquearSessaoSocialQuandoPerfilSistemaEncontradoAindaNaoPossuirEmailVerificado() throws Exception {
         Pessoa pessoa = pessoaRepositorio.save(new Pessoa(
                 "sub-conta-local",

@@ -7,8 +7,11 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Optional;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -90,11 +93,12 @@ public class AutenticacaoSessaoInternaServico {
     }
 
     public SessaoInternaAutenticada renovar(final String refreshToken, final String tokenDispositivo) {
+        CredenciaisClienteKeycloak credenciaisCliente = resolverCredenciaisClienteRefresh(refreshToken);
         LinkedMultiValueMap<String, String> form = new LinkedMultiValueMap<>();
         form.add("grant_type", GRANT_TYPE_REFRESH_TOKEN);
-        form.add("client_id", properties.getClientId());
-        if (StringUtils.hasText(properties.getClientSecret())) {
-            form.add("client_secret", properties.getClientSecret());
+        form.add("client_id", credenciaisCliente.clientId());
+        if (StringUtils.hasText(credenciaisCliente.clientSecret())) {
+            form.add("client_secret", credenciaisCliente.clientSecret());
         }
         form.add("refresh_token", Objects.requireNonNull(refreshToken, "refreshToken é obrigatório"));
         if (StringUtils.hasText(tokenDispositivo)) {
@@ -206,6 +210,47 @@ public class AutenticacaoSessaoInternaServico {
         return properties.getScope();
     }
 
+    private CredenciaisClienteKeycloak resolverCredenciaisClienteRefresh(final String refreshToken) {
+        String clientIdTokenExchange = resolverClientIdTokenExchange();
+        return resolverClientIdAutorizado(refreshToken)
+                .filter(clientId -> clientId.equals(clientIdTokenExchange))
+                .map(ignored -> new CredenciaisClienteKeycloak(
+                        clientIdTokenExchange,
+                        resolverClientSecretTokenExchange()
+                ))
+                .orElseGet(() -> new CredenciaisClienteKeycloak(
+                        properties.getClientId(),
+                        properties.getClientSecret()
+                ));
+    }
+
+    private Optional<String> resolverClientIdAutorizado(final String refreshToken) {
+        if (!StringUtils.hasText(refreshToken)) {
+            return Optional.empty();
+        }
+        String[] partes = refreshToken.split("\\.");
+        if (partes.length < 2) {
+            return Optional.empty();
+        }
+        try {
+            String payloadJson = new String(
+                    Base64.getUrlDecoder().decode(partes[1]),
+                    StandardCharsets.UTF_8
+            );
+            JsonNode payload = objectMapper.readTree(payloadJson);
+            return primeiroTexto(payload, "azp")
+                    .or(() -> primeiroTexto(payload, "client_id"))
+                    .or(() -> primeiroTexto(payload, "issuedFor"));
+        } catch (IllegalArgumentException | JsonProcessingException ex) {
+            return Optional.empty();
+        }
+    }
+
+    private static Optional<String> primeiroTexto(final JsonNode payload, final String campo) {
+        String valor = payload.path(campo).asText(null);
+        return StringUtils.hasText(valor) ? Optional.of(valor) : Optional.empty();
+    }
+
     private ResponseEntity<String> executarChamadaToken(final LinkedMultiValueMap<String, String> form,
                                                         final HttpHeaders headers) {
         return restTemplate.exchange(
@@ -265,5 +310,8 @@ public class AutenticacaoSessaoInternaServico {
     }
 
     private record ParametrosTrocaTokenSocial(String issuer, String subjectTokenType) {
+    }
+
+    private record CredenciaisClienteKeycloak(String clientId, String clientSecret) {
     }
 }

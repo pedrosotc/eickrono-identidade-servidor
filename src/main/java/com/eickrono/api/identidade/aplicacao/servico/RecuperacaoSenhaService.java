@@ -64,31 +64,6 @@ public class RecuperacaoSenhaService {
                                    final TokenDispositivoService tokenDispositivoService,
                                    final SincronizacaoModeloMultiappService sincronizacaoModeloMultiappService,
                                    final AuditoriaService auditoriaService,
-                                   final ResolvedorProjetoFluxoPublico resolvedorProjetoFluxoPublico) {
-        this(
-                recuperacaoSenhaRepositorio,
-                cadastroContaRepositorio,
-                clienteAdministracaoCadastroKeycloak,
-                canalEnvioCodigoRecuperacaoSenhaEmail,
-                dispositivoProperties,
-                clock,
-                tokenDispositivoService,
-                sincronizacaoModeloMultiappService,
-                auditoriaService,
-                new ResolvedorContextoFluxoPublico(cadastroContaRepositorio, recuperacaoSenhaRepositorio),
-                resolvedorProjetoFluxoPublico
-        );
-    }
-
-    public RecuperacaoSenhaService(final RecuperacaoSenhaRepositorio recuperacaoSenhaRepositorio,
-                                   final CadastroContaRepositorio cadastroContaRepositorio,
-                                   final ClienteAdministracaoCadastroKeycloak clienteAdministracaoCadastroKeycloak,
-                                   final CanalEnvioCodigoRecuperacaoSenhaEmail canalEnvioCodigoRecuperacaoSenhaEmail,
-                                   final DispositivoProperties dispositivoProperties,
-                                   final Clock clock,
-                                   final TokenDispositivoService tokenDispositivoService,
-                                   final SincronizacaoModeloMultiappService sincronizacaoModeloMultiappService,
-                                   final AuditoriaService auditoriaService,
                                    final ResolvedorContextoFluxoPublico resolvedorContextoFluxoPublico,
                                    final ResolvedorProjetoFluxoPublico resolvedorProjetoFluxoPublico) {
         this.recuperacaoSenhaRepositorio = Objects.requireNonNull(
@@ -109,29 +84,6 @@ public class RecuperacaoSenhaService {
                 resolvedorContextoFluxoPublico, "resolvedorContextoFluxoPublico e obrigatorio");
         this.resolvedorProjetoFluxoPublico = Objects.requireNonNull(
                 resolvedorProjetoFluxoPublico, "resolvedorProjetoFluxoPublico e obrigatorio");
-    }
-
-    public RecuperacaoSenhaService(final RecuperacaoSenhaRepositorio recuperacaoSenhaRepositorio,
-                                   final CadastroContaRepositorio cadastroContaRepositorio,
-                                   final ClienteAdministracaoCadastroKeycloak clienteAdministracaoCadastroKeycloak,
-                                   final CanalEnvioCodigoRecuperacaoSenhaEmail canalEnvioCodigoRecuperacaoSenhaEmail,
-                                   final DispositivoProperties dispositivoProperties,
-                                   final Clock clock,
-                                   final TokenDispositivoService tokenDispositivoService,
-                                   final ResolvedorProjetoFluxoPublico resolvedorProjetoFluxoPublico) {
-        this(
-                recuperacaoSenhaRepositorio,
-                cadastroContaRepositorio,
-                clienteAdministracaoCadastroKeycloak,
-                canalEnvioCodigoRecuperacaoSenhaEmail,
-                dispositivoProperties,
-                clock,
-                tokenDispositivoService,
-                null,
-                null,
-                new ResolvedorContextoFluxoPublico(cadastroContaRepositorio, recuperacaoSenhaRepositorio),
-                resolvedorProjetoFluxoPublico
-        );
     }
 
     public RecuperacaoSenhaIniciada iniciar(final String aplicacaoId, final String emailPrincipal) {

@@ -35,17 +35,9 @@ public record CadastroApiRequest(
         @AssertTrue boolean aceitouTermos,
         @AssertTrue boolean aceitouPrivacidade,
         @NotNull PlataformaAtestacaoApp plataformaApp,
-        @Valid VinculoSocialPendenteApiRequest vinculoSocialPendente,
-        List<@Valid VinculoSocialPendenteApiRequest> vinculosSociaisPendentes,
+        @Valid List<VinculoSocialConfirmadoApiRequest> vinculosSociaisConfirmados,
+        @Valid List<AvatarCadastroConfirmadoApiRequest> avataresCadastroConfirmados,
         @Valid @NotNull AtestacaoOperacaoApiRequest atestacao,
         @Valid @NotNull SegurancaAplicativoApiRequest segurancaAplicativo
 ) {
-    public CadastroApiRequest {
-        vinculosSociaisPendentes = vinculosSociaisPendentes == null ? null : List.copyOf(vinculosSociaisPendentes);
-    }
-
-    @Override
-    public List<VinculoSocialPendenteApiRequest> vinculosSociaisPendentes() {
-        return vinculosSociaisPendentes == null ? null : List.copyOf(vinculosSociaisPendentes);
-    }
 }
