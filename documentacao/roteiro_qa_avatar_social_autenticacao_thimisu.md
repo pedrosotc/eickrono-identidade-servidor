@@ -65,12 +65,58 @@ teste. Nao registrar senha em documento compartilhado.
 | --- | --- | --- | --- | --- | --- |
 | QA-A | Cadastro comum sem foto |  |  | Nenhum | C01 |
 | QA-B | Cadastro comum com foto local |  |  | Nenhum | C02 |
-| QA-C | Cadastro iniciado por social |  |  | Google ou Apple | C03, C09 |
-| QA-D | Cadastro social com avatar local nao preferido |  |  | Google ou Apple | C04 |
-| QA-E | Cadastro social com avatar local preferido |  |  | Google ou Apple | C05 |
-| QA-F | Conta local existente para entrar-e-vincular |  |  | Google ou Apple | C06, C07, C08 |
+| QA-C | Cadastro iniciado por social sem foto social |  |  | Apple QA 01 | C03, C06 |
+| QA-D | Cadastro social com avatar social preferido e foto local nao preferida |  |  | Google QA 01 | C04, C06, C13, C14 |
+| QA-E | Cadastro social com foto local preferida |  |  | Google QA 02 | C05, C06 |
+| QA-F | Conta local existente para entrar-e-vincular |  |  | Apple QA 01 ou Google QA 02 | C07, C08, C09 |
 | QA-G | Conta desabilitada |  |  | Senha/social | C17 |
 | QA-H | Conta nao liberada |  |  | Senha/social | C16 |
+
+### Distribuicao pratica das redes sociais disponiveis
+
+Esta rodada considera a massa real disponivel para o iPhone fisico:
+
+| Alias | Rede | Quantidade disponivel | Foto social disponivel | Uso principal |
+| --- | --- | --- | --- | --- |
+| Apple QA 01 | Apple ID no iPhone | 1 conta | Nao | Cenarios sociais sem avatar social |
+| Google QA 01 | Google/Gmail | 1 conta | Sim | Cenarios que precisam validar avatar social preferido |
+| Google QA 02 | Google/Gmail | 1 conta | Sim | Cenarios que precisam de segunda identidade social, conflito ou avatar local preferido |
+
+Regras desta rodada:
+
+- Cenarios que precisam provar foto vinda da rede social devem usar Google.
+- Cenarios com Apple nao devem esperar foto social; o resultado correto e
+  sigla, foto local ou ausencia de avatar social, conforme o cenario.
+- A mesma conta social nao deve ser usada em dois cadastros definitivos ao
+  mesmo tempo.
+- Quando um cenario precisar reutilizar a mesma conta social, executar antes a
+  limpeza seletiva do usuario correspondente nos servidores.
+- Se Apple QA 01 for usado em C03 e depois for necessario usa-lo em C07, o
+  cadastro anterior deve ser removido ou o C07 deve usar Google QA 02.
+
+### Mapa de execucao com as contas sociais disponiveis
+
+| Cenario | Precisa rede social? | Conta/rede recomendada | Foto esperada |
+| --- | --- | --- | --- |
+| C01 | Nao | Nenhuma | Sigla do usuario |
+| C02 | Nao | Nenhuma | Foto local THIMISU |
+| C03 | Sim | Apple QA 01 | Sem foto social; usar sigla se nao houver foto local |
+| C04 | Sim | Google QA 01 | Foto social Google como preferida |
+| C05 | Sim | Google QA 02 | Foto local THIMISU como preferida; foto Google nao deve aparecer como preferida |
+| C06 | Sim | Reusar QA-C, QA-D ou QA-E conforme o login validado | Conforme avatar preferido da conta reusada |
+| C07 | Sim | Conta local QA-F + provedor ainda nao vinculado, preferir Apple QA 01 se estiver livre | Conforme conta local; social apenas vincula |
+| C08 | Sim | Mesmo provedor preparado para C07 | Nao deve criar avatar/vinculo definitivo |
+| C09 | Sim | Mesmo provedor preparado para C07 | Nao deve criar avatar/vinculo definitivo |
+| C10 | Nao obrigatorio | Conta criada em C01, C02 ou C03 | Conforme conta selecionada |
+| C11 | Nao obrigatorio | Conta criada em C01, C02 ou C03 | Conforme conta selecionada |
+| C12 | Nao obrigatorio | Duas contas locais ja criadas | Conforme cada conta |
+| C13 | Depende | Preferir QA-D ou QA-E | Deve atualizar conforme avatar preferido alterado |
+| C14 | Sim | QA-D com Google QA 01 | Avatar social removido/indisponivel deve cair para sigla ou outro preferido |
+| C15 | Sim | Apple QA 01 ou Google QA 02 | Nao deve persistir avatar/vinculo em falha de rede |
+| C16 | Nao obrigatorio | Cadastro pendente por senha | Sem requisito de foto |
+| C17 | Nao obrigatorio | Conta desabilitada por senha ou social | Sem requisito de foto |
+| C18 | Sim | Google QA 01 ja vinculado + conta local diferente | Conflito; nao deve transferir avatar/vinculo |
+| C19 | Depende da sujeira preparada | Usar qualquer conta preparada para regressao | Conforme dado legado controlado |
 
 ## Preparacao tecnica obrigatoria
 
@@ -147,6 +193,10 @@ assinada sensivel.
 | `qa_avatar_storage_local_fim` | Storage local terminou em ambiente local |
 
 ## Ordem de execucao dos cenarios
+
+Este roteiro possui 18 cenarios principais, C01 a C18. O C19 e um cenario
+extra de regressao com base suja controlada e deve ser executado somente quando
+houver dados legados preparados.
 
 | Ordem | Cenario | Fase | Dependencia |
 | --- | --- | --- | --- |
@@ -268,11 +318,12 @@ quando o cadastro e concluido.
 Pre-condicao:
 
 QA-C nao existe na base HML e o e-mail social usado nao pertence a conta local.
+Nesta rodada, usar Apple QA 01 para validar o caminho social sem foto social.
 
 Passos:
 
 1. Reinstalar app.
-2. Na tela de login, tocar em Google ou Apple.
+2. Na tela de login, tocar em Apple.
 3. Autenticar com a conta social QA-C.
 4. Quando o app perguntar se deseja iniciar cadastro, tocar em `Sim`.
 5. Conferir que a tela de cadastro abriu.
@@ -289,6 +340,8 @@ Esperado:
 - app guarda dados sociais temporariamente;
 - cadastro envia lista de vinculos sociais confirmados;
 - apenas uma opcao de avatar pode ficar preferida;
+- como Apple nao disponibiliza foto social nesta massa, nao esperar avatar
+  social no cadastro nem na home;
 - login social posterior entra direto.
 
 Logs obrigatorios:
@@ -313,11 +366,12 @@ social fica preferido.
 
 Pre-condicao:
 
-QA-D nao existe na base HML.
+QA-D nao existe na base HML. Nesta rodada, usar Google QA 01 porque este
+cenario precisa validar foto social.
 
 Passos:
 
-1. Iniciar cadastro por Google ou Apple com QA-D.
+1. Iniciar cadastro por Google com QA-D.
 2. Aceitar abrir cadastro.
 3. Carregar foto local do dispositivo.
 4. Selecionar o avatar social como preferido.
@@ -351,11 +405,12 @@ fica como avatar preferido.
 
 Pre-condicao:
 
-QA-E nao existe na base HML.
+QA-E nao existe na base HML. Nesta rodada, usar Google QA 02 para separar este
+cadastro do Google QA 01 usado em C04/C14.
 
 Passos:
 
-1. Iniciar cadastro por Google ou Apple com QA-E.
+1. Iniciar cadastro por Google com QA-E.
 2. Aceitar abrir cadastro.
 3. Carregar foto local.
 4. Selecionar a foto local como preferida.
@@ -404,6 +459,13 @@ Esperado:
 - nao abre tela de excecao;
 - nao cria novo usuario.
 
+Observacao de massa:
+
+- se usar QA-C, nao esperar avatar social porque Apple QA 01 nao fornece foto;
+- se usar QA-D, esperar foto social Google;
+- se usar QA-E, esperar foto local THIMISU, porque ela foi marcada como
+  preferida.
+
 Logs obrigatorios:
 
 - `qa_login_social_vinculo_definitivo_encontrado`;
@@ -420,11 +482,15 @@ Pre-condicao:
 
 QA-F existe como conta local por senha e o provedor social QA-F ainda nao esta
 vinculado.
+Nesta rodada, preferir Apple QA 01 se ele estiver livre. Se Apple QA 01 ja foi
+usado em C03 e nao foi limpo, usar Google QA 02 somente se ele tambem estiver
+livre; nunca reutilizar uma rede ja vinculada sem limpeza seletiva.
 
 Passos:
 
 1. Abrir app na tela de login.
-2. Tocar em Google ou Apple usando o e-mail de QA-F.
+2. Tocar no provedor social escolhido para QA-F usando o mesmo e-mail da conta
+   local.
 3. Aguardar aviso inferior perguntando se deseja vincular.
 4. Escolher `Entrar e vincular`.
 5. Fazer login com usuario e senha de QA-F.
@@ -774,6 +840,8 @@ usuario B.
 Pre-condicao:
 
 Rede social ja vinculada a QA-C ou QA-D.
+Nesta rodada, preferir Google QA 01 ja vinculado em QA-D para validar conflito
+com foto social e impedir transferencia indevida de avatar/vinculo.
 
 Passos:
 

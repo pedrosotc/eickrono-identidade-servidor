@@ -1112,6 +1112,7 @@ class CadastroContaInternaServicoTest {
                 eq(42L),
                 any(OffsetDateTime.class),
                 any(OffsetDateTime.class),
+                eq("ana.souza"),
                 argThat(identidades -> identidades.size() == 1
                         && "apple-sub-123".equals(identidades.get(0).identificadorCanonico()))
         );

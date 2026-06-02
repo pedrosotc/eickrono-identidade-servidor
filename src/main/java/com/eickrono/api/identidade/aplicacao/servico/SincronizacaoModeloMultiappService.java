@@ -57,7 +57,8 @@ public class SincronizacaoModeloMultiappService {
                     cadastroConta.getAtualizadoEm(),
                     clienteEcossistemaId,
                     cadastroConta.getEmailConfirmadoEm(),
-                    cadastroConta.getEmailConfirmadoEm()
+                    cadastroConta.getEmailConfirmadoEm(),
+                    cadastroConta.getUsuario()
             );
         }
 
@@ -720,6 +721,25 @@ public class SincronizacaoModeloMultiappService {
                                        final Long clienteEcossistemaId,
                                        final OffsetDateTime emailVerificadoEm,
                                        final OffsetDateTime ultimoAcessoEm) {
+        return assegurarUsuarioAtivo(
+                subRemoto,
+                emailPrincipal,
+                criadoEm,
+                atualizadoEm,
+                clienteEcossistemaId,
+                emailVerificadoEm,
+                ultimoAcessoEm,
+                null);
+    }
+
+    private UUID assegurarUsuarioAtivo(final String subRemoto,
+                                       final String emailPrincipal,
+                                       final OffsetDateTime criadoEm,
+                                       final OffsetDateTime atualizadoEm,
+                                       final Long clienteEcossistemaId,
+                                       final OffsetDateTime emailVerificadoEm,
+                                       final OffsetDateTime ultimoAcessoEm,
+                                       final String identificadorPublicoCliente) {
         if (subRemoto == null || subRemoto.isBlank()) {
             return null;
         }
@@ -764,7 +784,14 @@ public class SincronizacaoModeloMultiappService {
                     atualizado_em = EXCLUDED.atualizado_em
                 """, paramsUsuario);
 
-        assegurarVinculoUsuario(usuarioId, clienteEcossistemaId, criadoEm, atualizadoEm, ultimoAcessoEm, subRemoto);
+        assegurarVinculoUsuario(
+                usuarioId,
+                clienteEcossistemaId,
+                criadoEm,
+                atualizadoEm,
+                ultimoAcessoEm,
+                subRemoto,
+                identificadorPublicoCliente);
         if (emailPrincipal != null && !emailPrincipal.isBlank()) {
             assegurarFormaAcessoEmail(usuarioId, emailPrincipal, criadoEm, emailVerificadoEm);
         }
@@ -776,13 +803,14 @@ public class SincronizacaoModeloMultiappService {
                                          final OffsetDateTime criadoEm,
                                          final OffsetDateTime atualizadoEm,
                                          final OffsetDateTime ultimoAcessoEm,
-                                         final String subRemoto) {
+                                         final String subRemoto,
+                                         final String identificadorPublicoCliente) {
         MapSqlParameterSource paramsVinculo = new MapSqlParameterSource()
                 .addValue("id", gerarVinculoClienteId(subRemoto))
                 .addValue("usuarioId", usuarioId)
                 .addValue("clienteEcossistemaId", clienteEcossistemaId)
                 .addValue("statusVinculo", STATUS_VINCULO_ATIVO)
-                .addValue("identificadorPublicoCliente", null)
+                .addValue("identificadorPublicoCliente", normalizarIdentificadorPublicoCliente(identificadorPublicoCliente))
                 .addValue("ultimoAcessoEm", ultimoAcessoEm)
                 .addValue("vinculadoEm", criadoEm)
                 .addValue("atualizadoEm", atualizadoEm)
@@ -816,6 +844,10 @@ public class SincronizacaoModeloMultiappService {
                 )
                 ON CONFLICT (usuario_id, cliente_ecossistema_id) DO UPDATE
                 SET status_vinculo = EXCLUDED.status_vinculo,
+                    identificador_publico_cliente = COALESCE(
+                        EXCLUDED.identificador_publico_cliente,
+                        autenticacao.usuarios_clientes_ecossistema.identificador_publico_cliente
+                    ),
                     ultimo_acesso_em = COALESCE(EXCLUDED.ultimo_acesso_em,
                                                 autenticacao.usuarios_clientes_ecossistema.ultimo_acesso_em),
                     atualizado_em = EXCLUDED.atualizado_em,
@@ -997,6 +1029,14 @@ public class SincronizacaoModeloMultiappService {
             return "EMAIL_CONFIRMADO";
         }
         return "ABERTO";
+    }
+
+    private String normalizarIdentificadorPublicoCliente(final String identificadorPublicoCliente) {
+        if (identificadorPublicoCliente == null) {
+            return null;
+        }
+        String normalizado = identificadorPublicoCliente.trim().toLowerCase(Locale.ROOT);
+        return normalizado.isBlank() ? null : normalizado;
     }
 
     private UUID gerarUsuarioId(final String subRemoto) {

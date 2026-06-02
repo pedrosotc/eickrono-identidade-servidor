@@ -11,6 +11,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -22,6 +24,7 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class PendenciaRemocaoAvatarUsuarioService {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(PendenciaRemocaoAvatarUsuarioService.class);
     private static final String STATUS_PENDENTE = "PENDENTE";
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
@@ -45,8 +48,21 @@ public class PendenciaRemocaoAvatarUsuarioService {
         String bucket = textoObrigatorio(storageProperties.getBucket(), "identidade.avatar.storage.bucket");
         OffsetDateTime retencaoExpiraEm = OffsetDateTime.now()
                 .plusDays(Math.max(1, remocaoProperties.getPendenciaRetencaoDias()));
+        LOGGER.info(
+                "avatar_remocao_pendencia_materializacao_iniciada correlacaoId={} produto={} usuariosCliente={} bucket={} retencaoDias={}",
+                correlacaoId,
+                produto,
+                usuarioClienteIds.size(),
+                bucket,
+                Math.max(1, remocaoProperties.getPendenciaRetencaoDias())
+        );
 
         List<AvatarRemovivel> avatares = buscarAvataresRemoviveis(usuarioClienteIds);
+        LOGGER.info(
+                "avatar_remocao_pendencia_avatares_resolvidos correlacaoId={} quantidade={}",
+                correlacaoId,
+                avatares.size()
+        );
         List<String> avatarIds = new ArrayList<>();
         List<String> storageKeys = new ArrayList<>();
         int materializadas = 0;
@@ -55,17 +71,33 @@ public class PendenciaRemocaoAvatarUsuarioService {
             if (linhas > 0) {
                 materializadas++;
             }
+            LOGGER.info(
+                    "avatar_remocao_pendencia_item_materializado correlacaoId={} avatarId={} usuarioClienteId={} origem={} inserido={}",
+                    correlacaoId,
+                    avatar.avatarId(),
+                    avatar.usuarioClienteId(),
+                    avatar.origem(),
+                    linhas > 0
+            );
             avatarIds.add(avatar.avatarId().toString());
             storageKeys.add(avatar.storageKey());
         }
 
-        return new MaterializarPendenciasRemocaoAvatarInternoApiResponse(
+        MaterializarPendenciasRemocaoAvatarInternoApiResponse resposta =
+                new MaterializarPendenciasRemocaoAvatarInternoApiResponse(
                 correlacaoId.toString(),
                 produto,
                 materializadas,
                 List.copyOf(avatarIds),
                 List.copyOf(storageKeys)
         );
+        LOGGER.info(
+                "avatar_remocao_pendencia_materializacao_concluida correlacaoId={} materializadas={} avatares={}",
+                correlacaoId,
+                resposta.pendenciasMaterializadas(),
+                resposta.avatarIds().size()
+        );
+        return resposta;
     }
 
     private List<AvatarRemovivel> buscarAvataresRemoviveis(final List<UUID> usuarioClienteIds) {

@@ -1147,6 +1147,7 @@ public class CadastroContaInternaServico {
                     clienteEcossistemaId,
                     agora,
                     agora,
+                    cadastroConta.getUsuario(),
                     identidades
             );
             vinculos.stream()

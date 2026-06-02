@@ -69,6 +69,8 @@ class ResolvedorContextoFluxoPublicoTest {
         verify(jdbcTemplate).query(sqlCaptor.capture(), paramsCaptor.capture(), any(RowMapper.class));
         assertThat(sqlCaptor.getValue()).contains("autenticacao.cadastros_conta");
         assertThat(sqlCaptor.getValue()).contains("identidade.contatos_email");
+        assertThat(sqlCaptor.getValue()).contains("email.email_normalizado = :email");
+        assertThat(sqlCaptor.getValue()).doesNotContain("LOWER(email.email)");
         assertThat(paramsCaptor.getValue().getValue("email")).isEqualTo("usuario@exemplo.com");
     }
 

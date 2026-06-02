@@ -34,7 +34,7 @@ public class ResolvedorContextoFluxoPublico {
              WHERE email_id = (
                     SELECT email.id
                       FROM identidade.contatos_email email
-                     WHERE LOWER(email.email) = :email
+                     WHERE email.email_normalizado = :email
                      ORDER BY email.atualizado_em DESC
                      LIMIT 1
                    )
@@ -51,7 +51,7 @@ public class ResolvedorContextoFluxoPublico {
              WHERE email_id = (
                     SELECT email.id
                       FROM identidade.contatos_email email
-                     WHERE LOWER(email.email) = :email
+                     WHERE email.email_normalizado = :email
                      ORDER BY email.atualizado_em DESC
                      LIMIT 1
                    )
